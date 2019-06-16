@@ -1,0 +1,130 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Remove="wwwroot\precache-manifest.be0a93547acce16416c8a0328c9f69c2.js" />
+    <Content Remove="wwwroot\precache-manifest.be7876163af0c95da71505dc39ae60bb.js" />
+    <Content Remove="wwwroot\precache-manifest.bec9a3315344cb49abee963e3a891d60.js" />
+    <Content Remove="wwwroot\precache-manifest.bf6ac15f7108b02322ffbe5e06fe2ded.js" />
+    <Content Remove="wwwroot\precache-manifest.bfc4448da422f36471a6eb8a91f0c959.js" />
+    <Content Remove="wwwroot\precache-manifest.c01fa36d27fbd25fce6b8004a9bfebcf.js" />
+    <Content Remove="wwwroot\precache-manifest.c0401ee6fcf0e66bd27bb5869bfca784.js" />
+    <Content Remove="wwwroot\precache-manifest.c0d3dd392fd224f293909a69e93730a3.js" />
+    <Content Remove="wwwroot\precache-manifest.c0e7be67e917ec6f7181d0483c491ccc.js" />
+    <Content Remove="wwwroot\precache-manifest.c0f818cb2d2c77cbd68dcb025982b5f9.js" />
+    <Content Remove="wwwroot\precache-manifest.c125732c36b88d828062efd08ced8970.js" />
+    <Content Remove="wwwroot\precache-manifest.c150975bbf23ae75770e37623e0ab237.js" />
+    <Content Remove="wwwroot\precache-manifest.c1a333886c9753104b5c538422ab392e.js" />
+    <Content Remove="wwwroot\precache-manifest.c1c8334c0d69e49ffb044c17b080a256.js" />
+    <Content Remove="wwwroot\precache-manifest.c256f33c83bb2fa18f3d79b8ddf1ee6a.js" />
+    <Content Remove="wwwroot\precache-manifest.c31f551e473533c78b597c15ec1c543c.js" />
+    <Content Remove="wwwroot\precache-manifest.c4a89c12d5847b1f45c7b5a32c00a6e8.js" />
+    <Content Remove="wwwroot\precache-manifest.c5069fd1e4f6372d19c83098fc1af997.js" />
+    <Content Remove="wwwroot\precache-manifest.c6843ed49fa41c974942fe111473a668.js" />
+    <Content Remove="wwwroot\precache-manifest.c6d433f2600ec2a39e3b1e2e11257a96.js" />
+    <Content Remove="wwwroot\precache-manifest.c7689c6379e98cb0a701f52667749116.js" />
+    <Content Remove="wwwroot\precache-manifest.c8a961192e24a817b5c8142536d79dba.js" />
+    <Content Remove="wwwroot\precache-manifest.c9194d2aaf77d3a0aa71003fe303c246.js" />
+    <Content Remove="wwwroot\precache-manifest.c9b81b983e0cf14fc67140f84afa14c2.js" />
+    <Content Remove="wwwroot\precache-manifest.ca6eb7282bc53412daa475b978e17d37.js" />
+    <Content Remove="wwwroot\precache-manifest.caa201a984666d2d1fb7afec7afda46a.js" />
+    <Content Remove="wwwroot\precache-manifest.caea5e8d93b1907dda52e55061f9012f.js" />
+    <Content Remove="wwwroot\precache-manifest.cb5dbb923f5ee341c63798280250d7ea.js" />
+    <Content Remove="wwwroot\precache-manifest.cb62558b5fd4e5d1e0bfe0859e22d1f0.js" />
+    <Content Remove="wwwroot\precache-manifest.ce5a1146f0181ccd05cd116aee8b23f1.js" />
+    <Content Remove="wwwroot\precache-manifest.cea20990272ebedfa7848886210f15c6.js" />
+    <Content Remove="wwwroot\precache-manifest.cfc249aea214a2e78f469dae1d3b9d32.js" />
+    <Content Remove="wwwroot\precache-manifest.d056fef7c879c923f0fc3027d370268c.js" />
+    <Content Remove="wwwroot\precache-manifest.d184988091430444630c84ae2883873f.js" />
+    <Content Remove="wwwroot\precache-manifest.d1daf87d9371e49ee4b102732a02d3bb.js" />
+    <Content Remove="wwwroot\precache-manifest.d2030628a2622b30540654c663c0d0f6.js" />
+    <Content Remove="wwwroot\precache-manifest.d477408257bdffc87c30b6f2b5f23fd1.js" />
+    <Content Remove="wwwroot\precache-manifest.d57b5eafd9d067997ea6a3d112e3f392.js" />
+    <Content Remove="wwwroot\precache-manifest.d61ba7e52665b8d7f282809dd71b80d0.js" />
+    <Content Remove="wwwroot\precache-manifest.d65fddbf43a368b04ed5ec36d749260d.js" />
+    <Content Remove="wwwroot\precache-manifest.d7430d67b76afcea82430770db6d8a57.js" />
+    <Content Remove="wwwroot\precache-manifest.d81c8bb8a3da19df8e3ad4c035315a51.js" />
+    <Content Remove="wwwroot\precache-manifest.d88c9243d36dea0c0756926e5ef0a29b.js" />
+    <Content Remove="wwwroot\precache-manifest.d8d52dae7905a53b119c35323bc2e82d.js" />
+    <Content Remove="wwwroot\precache-manifest.d9d754c0a07d69798ffa2b4f1abb0b6f.js" />
+    <Content Remove="wwwroot\precache-manifest.da4fe1c6911d987d3ec9d68e68b1bd30.js" />
+    <Content Remove="wwwroot\precache-manifest.dafda9abd49d32d73a4be767bad2c8da.js" />
+    <Content Remove="wwwroot\precache-manifest.db36918a9e61cefa683889480f0aeee6.js" />
+    <Content Remove="wwwroot\precache-manifest.db63a166f9644c465773072fa813fce5.js" />
+    <Content Remove="wwwroot\precache-manifest.db6db8b1383296a340bd817a6b8e0577.js" />
+    <Content Remove="wwwroot\precache-manifest.db7e2550e8fd9c6fb6b8fa0fea650475.js" />
+    <Content Remove="wwwroot\precache-manifest.dd004fe82d551cececdf797bd3032aee.js" />
+    <Content Remove="wwwroot\precache-manifest.ddb117fbf828783583df0db638048a5e.js" />
+    <Content Remove="wwwroot\precache-manifest.dde2e3229e7def2eb4fbc046854baba3.js" />
+    <Content Remove="wwwroot\precache-manifest.de2941acccf036b8cbaeee4697aa2e99.js" />
+    <Content Remove="wwwroot\precache-manifest.de71e8737f34c68a00889125743d0c59.js" />
+    <Content Remove="wwwroot\precache-manifest.dfdd62778433125f29fa30df58e8a55b.js" />
+    <Content Remove="wwwroot\precache-manifest.e09a96596049f37455d3fc9bb178fa55.js" />
+    <Content Remove="wwwroot\precache-manifest.e0b4661a8cd314635225e380375dea3e.js" />
+    <Content Remove="wwwroot\precache-manifest.e0d6ee57c58c0bae1ea08110582b6f3d.js" />
+    <Content Remove="wwwroot\precache-manifest.e22b50ae8ea8b8713960a090c711c63a.js" />
+    <Content Remove="wwwroot\precache-manifest.e2924df7c66ef5f7967b344151dd9832.js" />
+    <Content Remove="wwwroot\precache-manifest.e2fbde2887e0587ea825537939de088a.js" />
+    <Content Remove="wwwroot\precache-manifest.e5588877a438682f7b777f3fa198dbca.js" />
+    <Content Remove="wwwroot\precache-manifest.e5b12f54f55607335143a83f72073831.js" />
+    <Content Remove="wwwroot\precache-manifest.e5f55858bda227a9700e3625d5973969.js" />
+    <Content Remove="wwwroot\precache-manifest.e6a968036db66c6f179f45f7f377cffc.js" />
+    <Content Remove="wwwroot\precache-manifest.e6b0133b31b796436dd3f7b1cbd92830.js" />
+    <Content Remove="wwwroot\precache-manifest.e7355f655f4672339193bd22477d2b8b.js" />
+    <Content Remove="wwwroot\precache-manifest.e75aae411aa83c177c5e0e56ff455592.js" />
+    <Content Remove="wwwroot\precache-manifest.e810547f80fddf004cee37e87c61c480.js" />
+    <Content Remove="wwwroot\precache-manifest.e8571a21c25c5a529007b116b20dea14.js" />
+    <Content Remove="wwwroot\precache-manifest.e88b8d52d04fa25b309f95b9b5260bfb.js" />
+    <Content Remove="wwwroot\precache-manifest.e91325c9ee30abe7aea240af5a49ff0e.js" />
+    <Content Remove="wwwroot\precache-manifest.e9cf62b9dd252b1841d7d967d8f99512.js" />
+    <Content Remove="wwwroot\precache-manifest.e9f6492a65fdc6798c5b88dc8826f291.js" />
+    <Content Remove="wwwroot\precache-manifest.e9fd59fdca853a1f7804cabccc0ee234.js" />
+    <Content Remove="wwwroot\precache-manifest.ea1ea1e59269d700efba667d4f3948a9.js" />
+    <Content Remove="wwwroot\precache-manifest.ebb8345f1548ab043cbdc1fb6a60411a.js" />
+    <Content Remove="wwwroot\precache-manifest.ec06beb42562eea868a24f2ba5469910.js" />
+    <Content Remove="wwwroot\precache-manifest.ec91138964dc0fa21ea9acb602473418.js" />
+    <Content Remove="wwwroot\precache-manifest.ec995be6a3fdadfafd62234c1d13c1ad.js" />
+    <Content Remove="wwwroot\precache-manifest.eca1972e5450386de317caed25c127f1.js" />
+    <Content Remove="wwwroot\precache-manifest.ee35d621b3b2e5a5db65afa34ac2a646.js" />
+    <Content Remove="wwwroot\precache-manifest.ee3d9374d359a8adcaf6313e4332963e.js" />
+    <Content Remove="wwwroot\precache-manifest.ef260be5941a1d961381cdc44cdcfc8a.js" />
+    <Content Remove="wwwroot\precache-manifest.ef36b6c9f921f5b3f7d66408ffeb5700.js" />
+    <Content Remove="wwwroot\precache-manifest.ef47332d2385fddd284a702f9f97097b.js" />
+    <Content Remove="wwwroot\precache-manifest.f08d8c028a143ba457875c1f0e5d3cf2.js" />
+    <Content Remove="wwwroot\precache-manifest.f17234317fbdac2795a0a09f3494d0fd.js" />
+    <Content Remove="wwwroot\precache-manifest.f238bc3c64baf947a3d6947182a95a55.js" />
+    <Content Remove="wwwroot\precache-manifest.f37997adca7b346ed4b4c8b637b2dcc7.js" />
+    <Content Remove="wwwroot\precache-manifest.f37ea6d1be663d69e1d856595e6d8637.js" />
+    <Content Remove="wwwroot\precache-manifest.f3b8c3cf9580f372154cc79712729af4.js" />
+    <Content Remove="wwwroot\precache-manifest.f501e51de344f8a6ee83fb8280174239.js" />
+    <Content Remove="wwwroot\precache-manifest.f54322ca2b45ea41f7f27becfba55b93.js" />
+    <Content Remove="wwwroot\precache-manifest.f6981e81edebf88e9e00a966b5e9e7b7.js" />
+    <Content Remove="wwwroot\precache-manifest.f6b0f39feaca97bfff4587754d52dcc0.js" />
+    <Content Remove="wwwroot\precache-manifest.f8c971a23b8f5428a2c04626965071c0.js" />
+    <Content Remove="wwwroot\precache-manifest.fa06b935962714feda85b3e8ee52e44d.js" />
+    <Content Remove="wwwroot\precache-manifest.fc25b3a9bb34bdc2877e24de61b2a82a.js" />
+    <Content Remove="wwwroot\precache-manifest.fc89b9418e2345712cd9b6c70103a41e.js" />
+    <Content Remove="wwwroot\precache-manifest.fe6d55a32f9584a517650aa2ce98c484.js" />
+    <Content Remove="wwwroot\precache-manifest.feb0fd341d11df272d613a90e4f2eab6.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="IdentityServer4" Version="2.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="2.2.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Razor.Design" Version="2.2.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.2.3" />
+    <PackageReference Include="NCrontab" Version="3.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IdentityServer\IdentityServer.csproj" />
+    <ProjectReference Include="..\RentTracker.Data\RentTracker.Data.csproj" />
+    <ProjectReference Include="..\RentTracker.Service\RentTracker.Service.csproj" />
+  </ItemGroup>
+
+</Project>

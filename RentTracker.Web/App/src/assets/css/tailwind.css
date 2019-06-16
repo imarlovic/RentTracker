@@ -1,0 +1,179 @@
+@tailwind base;
+
+@tailwind components;
+
+.rotate {
+  animation: rotation 1s infinite linear;
+}
+
+@keyframes rotation {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(359deg);
+  }
+}
+
+.border-box {
+  box-sizing: border-box;
+}
+
+.nav-link {
+  @apply border-box font-semibold no-underline text-white bg-transparent text-xl tracking-tight mr-0 p-4;
+  transition: width 200ms ease-in-out;
+}
+
+.nav-link .description {
+  @apply pl-2;
+}
+
+.nav-link > .icon {
+  @apply h-full;
+}
+
+.nav-link:hover,
+.nav-link.router-link-active {
+  @apply bg-blue-400;
+}
+
+.nav-link:hover .description,
+.nav-link.router-link-active .description {
+  @apply inline;
+}
+
+.drawer-link {
+  @apply border-box font-semibold no-underline text-white bg-transparent text-xl tracking-tight p-2;
+  transition: all 100ms ease-in-out;
+}
+
+.drawer-link:hover {
+  @apply bg-blue-400 shadow-lg;
+}
+
+.drawer-link.router-link-active {
+  @apply bg-blue-400 shadow-lg;
+}
+
+.btn {
+  outline: none;
+  @apply h-12;
+  @apply px-3;
+  @apply bg-white text-gray-900 font-semibold leading-tight border border-gray-400 rounded;
+}
+
+.btn:hover {
+  @apply bg-gray-200;
+}
+
+.btn.btn-primary {
+  @apply bg-blue-600 text-white;
+}
+
+.btn.btn-primary:hover {
+  @apply bg-blue-500;
+}
+
+.btn.btn-secondary {
+  @apply bg-gray-600 text-white;
+}
+
+.btn.btn-secondary:hover {
+  @apply bg-gray-500;
+}
+
+.btn.btn-outline-secondary {
+  @apply border-2 border-gray-600 text-gray-600;
+}
+
+.btn.btn-outline-secondary:hover {
+  @apply bg-gray-600 text-white;
+}
+
+.btn.btn-outline-danger {
+  @apply border-2 border-red-600 text-red-600;
+}
+
+.btn.btn-outline-danger:hover {
+  @apply bg-red-600 text-white;
+}
+
+.btn-transparent {
+  @apply bg-transparent text-white border-gray-500 border-2;
+}
+
+.btn-link {
+  @apply cursor-pointer text-blue-600 font-semibold;
+  line-height: 40px;
+}
+
+.btn-link:hover {
+  @apply text-blue-700 border-blue-600;
+  border-bottom-width: 1px;
+}
+
+.select {
+  @apply flex flex-row;
+  @apply h-12;
+  @apply max-w-full w-full appearance-none relative;
+  @apply bg-gray-200 text-gray-700 border rounded leading-tight;
+}
+
+.select:focus {
+  @apply outline-none bg-white border-gray-500;
+}
+
+.field {
+  @apply pr-3;
+  @apply py-3 px-2;
+}
+
+.control {
+  position: relative;
+}
+
+.size-sm {
+  @apply h-8 text-sm;
+}
+
+.input {
+  @apply h-12;
+  @apply px-3;
+  @apply max-w-full w-full appearance-none block relative;
+  @apply bg-gray-200 text-gray-700 border rounded leading-tight;
+}
+
+.input.is-invalid {
+  @apply border-red-500;
+}
+
+.input:focus {
+  @apply outline-none bg-white;
+}
+
+.modal-content {
+}
+
+.modal-header {
+  box-sizing: border-box;
+  @apply rounded-t border-b border-gray-300;
+}
+
+.modal-footer {
+  box-sizing: border-box;
+  @apply rounded-b border-t border-gray-300;
+}
+
+.bg-airbnb {
+  background-color: #ff5a5f;
+}
+
+.bg-booking {
+  background-color: #00347c;
+}
+
+.bg-renttracker {
+  background-color: #3182ce;
+}
+
+@tailwind utilities;
