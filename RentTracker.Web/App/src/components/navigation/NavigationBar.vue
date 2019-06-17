@@ -6,6 +6,14 @@
         @click="toggleDrawer"
       ><span class="icon"><i class="fas fa-bars"></i></span></button>
       <router-link
+        class="xl:px-6"
+        to="/"
+      ><img
+          class="navbar-logo"
+          src="/img/logos/renttracker_logo_white.png"
+          alt=""
+        ></router-link>
+      <router-link
         v-for="link in links"
         :key="link.path"
         :to="link.path"
@@ -26,8 +34,12 @@
       v-show="drawerOpen"
       class="drawer min-h-screen w-full fixed top-0 left-0 flex flex-col justify-center items-center bg-blue-600"
     >
-      <div class="absolute top-0 text-2xl font-semibold tracking-widest text-white p-4">
-        RentTracker
+      <div class="absolute top-0 text-2xl font-semibold tracking-widest text-white p-4 w-64">
+        <!-- RentTracker -->
+        <img
+          src="/img/logos/renttracker_logo_white.png"
+          alt=""
+        >
       </div>
       <router-link
         v-for="link in links"
@@ -35,10 +47,13 @@
         :to="link.path"
         class="drawer-link w-full flex justify-center items-center py-4"
         @click.native="toggleDrawer"
-      ><i
-          class="w-5/12 text-right pr-6 flex-grow"
+      >
+        <i
+          class="absolute left-0 pl-6 text-right pr-6 flex-grow"
           :class="link.icon"
-        ></i><span class="w-7/12">{{link.label}}</span></router-link>
+        ></i>
+        <span class="text-center">{{link.label}}</span>
+      </router-link>
       <div class="flex flex-col items-center text-white absolute bottom-0">
         <a
           class="p-4 font-semibold"
@@ -77,14 +92,19 @@ export default {
           icon: "fas fa-file-invoice-dollar"
         },
         {
-          path: "/integrations",
-          label: "Integrations",
-          icon: "fas fa-layer-group"
+          path: "/documents",
+          label: "Documents",
+          icon: "fas fa-file-alt"
         },
         {
           path: "/business-analysis",
           label: "Statistics",
           icon: "fas fa-chart-line"
+        },
+        {
+          path: "/integrations",
+          label: "Integrations",
+          icon: "fas fa-layer-group"
         }
       ]
     };
@@ -105,6 +125,12 @@ export default {
 .navbar {
   transition: all 500ms ease-in;
 }
+
+.navbar-logo {
+  height: 2rem;
+  padding-bottom: 0.4rem;
+}
+
 .drawer {
   z-index: 99999999;
 }

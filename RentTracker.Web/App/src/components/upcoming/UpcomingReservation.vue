@@ -121,7 +121,8 @@ export default {
       detailed: false,
       source_logo_urls: {
         Booking: "/img/logos/booking_logo.png",
-        Airbnb: "/img/logos/airbnb_logo.png"
+        Airbnb: "/img/logos/airbnb_logo.png",
+        RentTracker: "/img/logos/renttracker_logo.png"
       }
     };
   },

@@ -13,7 +13,7 @@
 
       <div
         v-if="block.spacer"
-        class="spacer flex flex-col my-4"
+        class="spacer flex flex-col mt-4"
       >
         <span class="py-2"><i class="fas fa-circle"></i></span>
         <span class="py-2"><i class="fas fa-circle"></i></span>
@@ -49,7 +49,7 @@
 
       <div
         v-if="block.spacer"
-        class="spacer flex flex-col my-4"
+        class="spacer flex flex-col mt-4"
       >
         <span class="py-2"><i class="fas fa-circle"></i></span>
         <span class="py-2"><i class="fas fa-circle"></i></span>

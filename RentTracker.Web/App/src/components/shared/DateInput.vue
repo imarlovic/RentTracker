@@ -6,6 +6,8 @@
       type="date"
       placeholder="Check-in"
       :value="date"
+      :min="min"
+      :max="max"
       @input="parseDate($event.target.value)"
     >
     {{ date | date }}
@@ -20,6 +22,14 @@ export default {
   inheritAttrs: true,
   mixins: [FormattingFilters],
   props: {
+    min: {
+      type: String,
+      default: "1970-01-01"
+    },
+    max: {
+      type: String,
+      default: "2999-12-31"
+    },
     value: {
       type: Date | String,
       default: new Date().toString()

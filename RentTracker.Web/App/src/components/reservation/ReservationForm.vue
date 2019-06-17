@@ -12,16 +12,23 @@
         v-if="formData"
         class="flex flex-row flex-wrap align-center justify-between p-3"
       >
-        <div class="w-full md:w-1/2">
-          <r-field label="Reservation Reference">
+        <div class="w-full flex flex-wrap">
+          <r-field
+            label="Reservation Reference"
+            class="w-full md:w-1/2"
+          >
             <input
               class="input"
               type="text"
               placeholder="Reservation Reference"
-              v-model="formData.reference"
+              readonly
+              :value="formData.reference"
             >
           </r-field>
-          <r-field label="Holding name">
+          <r-field
+            label="Holding name"
+            class="w-full md:w-1/2"
+          >
             <input
               class="input"
               type="text"
@@ -29,16 +36,33 @@
               v-model="formData.holdingName"
             >
           </r-field>
-          <r-field label="Price">
+        </div>
+        <div class="w-full flex flex-wrap">
+          <r-field
+            label="Price"
+            class="w-full md:w-1/2"
+          >
             <currency-input
               placeholder="Price"
               v-model="formData.price"
               :currency="formData.currency"
             ></currency-input>
           </r-field>
+          <r-field
+            label="Currency"
+            class="w-full md:w-1/2"
+          >
+            <r-select v-model="formData.currency">
+              <option value="HRK">HRK</option>
+              <option value="EUR">EUR</option>
+            </r-select>
+          </r-field>
         </div>
-        <div class="w-full md:w-1/2">
-          <r-field label="Source">
+        <div class="w-full flex flex-wrap">
+          <r-field
+            label="Source"
+            class="w-full md:w-1/2"
+          >
             <input
               class="input"
               type="text"
@@ -47,7 +71,10 @@
               :value="formData.source"
             >
           </r-field>
-          <r-field label="Country">
+          <r-field
+            label="Country"
+            class="w-full md:w-1/2"
+          >
             <input
               class="input"
               type="text"
@@ -55,14 +82,49 @@
               v-model="formData.country"
             >
           </r-field>
-          <r-field label="Currency">
-            <r-select v-model="formData.currency">
-              <option value="HRK">HRK</option>
-              <option value="EUR">EUR</option>
-            </r-select>
+        </div>
+        <div class="w-full flex flex-wrap mt-4">
+          <r-field
+            label="Adults"
+            class="w-full md:w-1/3"
+          >
+            <input
+              class="input"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="Adults"
+              v-model="formData.adults"
+            >
+          </r-field>
+          <r-field
+            label="Children"
+            class="w-full md:w-1/3"
+          >
+            <input
+              class="input"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="Children"
+              v-model="formData.children"
+            >
+          </r-field>
+          <r-field
+            label="Infants"
+            class="w-full md:w-1/3"
+          >
+            <input
+              class="input"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="Infants"
+              v-model="formData.infants"
+            >
           </r-field>
         </div>
-        <div class="w-full flex justify-between mt-12">
+        <div class="w-full flex justify-between mt-4">
           <r-field
             label="Check-in"
             class="w-2/5"
@@ -70,6 +132,7 @@
             <date-input
               class="input"
               type="date"
+              :max="maxStartingDate"
               placeholder="Check-in"
               v-model="formData.startDate"
             />
@@ -81,6 +144,7 @@
             <date-input
               class="input"
               type="date"
+              :min="minEndingDate"
               placeholder="Check-out"
               v-model="formData.endDate"
             />
@@ -157,6 +221,20 @@ export default {
     };
   },
   computed: {
+    maxStartingDate() {
+      if (this.formData.endDate) {
+        return moment(this.formData.endDate)
+          .subtract(1, "days")
+          .format("YYYY-MM-DD");
+      }
+    },
+    minEndingDate() {
+      if (this.formData.startDate) {
+        return moment(this.formData.startDate)
+          .add(1, "days")
+          .format("YYYY-MM-DD");
+      }
+    },
     title() {
       let r = this.reservation;
 
@@ -194,20 +272,40 @@ export default {
         this.formData = reservation
           ? { ...reservation }
           : {
+              reference: `RT-${moment(this.datehint).format("YYYYMMDD")}`,
               source: "RentTracker",
               amount: 0.0,
-              currency: "HRK"
+              currency: "HRK",
+              adults: 1,
+              children: 0,
+              infants: 0
             };
+      }
+    },
+    "formData.startDate": {
+      handler: function(date) {
+        console.log(date);
+        if (moment(date).isValid() && this.formData.source === "RentTracker") {
+          this.$set(
+            this.formData,
+            "reference",
+            `RT-${moment(date).format("YYYYMMDD")}`
+          );
+        }
       }
     },
     datehint: {
       immediate: true,
       handler: function(date) {
         if (!this.reservation) {
-          this.formData.startDate = moment(this.datehint).toDate();
-          this.formData.endDate = moment(this.datehint)
+          let startDate = moment(this.datehint).toDate();
+          let endDate = moment(this.datehint)
             .add(1, "days")
             .toDate();
+
+          this.$set(this.formData, "startDate", startDate);
+
+          this.$set(this.formData, "endDate", endDate);
         }
       }
     }
