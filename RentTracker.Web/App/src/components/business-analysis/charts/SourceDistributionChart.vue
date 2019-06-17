@@ -18,33 +18,17 @@
 import { mapState, mapActions } from "vuex";
 import ReservationChart from "@/components/shared/charts/ReservationChart";
 import FormattingFilters from "@/mixins/FormattingFilters";
+import ChartConstants from "@/mixins/ChartConstants";
 import * as moment from "moment";
 import groupBy from "lodash.groupby";
 
 export default {
   name: "SourceDistributionChart",
   extends: ReservationChart,
-  mixins: [FormattingFilters],
+  mixins: [FormattingFilters, ChartConstants],
   data() {
     return {
       options: {
-        labels: [],
-        colors: ["#319795", "#00347c", "#ff5a5f"],
-        // colors: [
-        //   function({ value, seriesIndex, w }) {
-        //     var source = w.globals.seriesNames[seriesIndex];
-        //     switch (source) {
-        //       case "RentTracker":
-        //         return "#319795";
-        //       case "Booking":
-        //         return "#00347c";
-        //       case "Airbnb":
-        //         return "#ff5a5f";
-        //       default:
-        //         return "#333333";
-        //     }
-        //   }
-        // ],
         chart: {
           toolbar: {
             show: false
@@ -100,11 +84,18 @@ export default {
 
       let sourceMap = mapBySource(this.reservations);
 
+      let sourceNames = Object.keys(sourceMap);
+
       this.$nextTick(() => {
-        this.$refs.chart.updateOptions({ labels: Object.keys(sourceMap) });
+        this.$refs.chart.updateOptions({
+          colors: sourceNames.map(
+            source => this.seriesColorMap[source] || "#333"
+          ),
+          labels: sourceNames
+        });
       });
 
-      let sourceSeries = Object.keys(sourceMap).map(source =>
+      let sourceSeries = sourceNames.map(source =>
         getEarnings(sourceMap[source])
       );
 

@@ -81,7 +81,7 @@ namespace RentTracker.Service.Utilities
 
             return string.Join(" ", transformedCookies);
         }
-        public static async Task<IEnumerable<Reservation>> GetReservations(IntegrationConfiguration config)
+        public static async Task<IEnumerable<Reservation>> GetReservations(IntegrationConfiguration config, DateTime? start = null, DateTime? end = null)
         {
             var state = JsonConvert.DeserializeObject<JObject>(config.StateJson);
 
@@ -89,8 +89,8 @@ namespace RentTracker.Service.Utilities
             var cookieParams = state.GetValue("Cookies").ToObject<CookieParam[]>();
             var cookies = BuildCookieHeader(cookieParams);
 
-            var date_min = new DateTime(DateTime.Now.Year, 1, 1).ToString("yyy-MM-dd");
-            var date_max = DateTime.Now.AddMonths(6).ToString("yyy-MM-dd");
+            var date_min = start.HasValue ? start.Value.ToString("yyy-MM-dd") : new DateTime(DateTime.Now.Year, 1, 1).ToString("yyy-MM-dd");
+            var date_max = end.HasValue ? end.Value.ToString("yyy-MM-dd") : DateTime.Now.AddMonths(6).ToString("yyy-MM-dd");
             var limit = 40;
             var offset = 0;
             var page_index = 0;
@@ -156,9 +156,9 @@ namespace RentTracker.Service.Utilities
                 Currency = Currency.HRK,
                 Price = decimal.Parse(earnings?.Replace("kn", "") ?? "0.0", formatProvider),
                 Commission = 0.0m,
-                StartDate = DateTime.ParseExact(check_in, "yyyy-MM-dd", formatProvider),
-                EndDate = DateTime.ParseExact(check_out, "yyyy-MM-dd", formatProvider),
-                BookingDate = DateTime.ParseExact(booked_date, "yyyy-MM-dd", formatProvider),
+                StartDate = DateTime.TryParseExact(check_in, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime checkIn) ? checkIn : default(DateTime),
+                EndDate = DateTime.TryParseExact(check_out, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime checkOut) ? checkOut : default(DateTime),
+                BookingDate = DateTime.TryParseExact(booked_date, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime bookedDate) ? bookedDate : default(DateTime),
                 HoldingName = booked_by,
                 People = people,
                 Adults = adults,

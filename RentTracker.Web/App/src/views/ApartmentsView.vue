@@ -1,16 +1,25 @@
 <template>
-  <div class="flex p-4">
-    <apartment-card
-      v-for="apartment in apartments"
-      :key="apartment.id"
-      :apartment="apartment"
-      @apartment:edit="editApartment"
-    ></apartment-card>
-
+  <div class="h-full flex flex-col p-4 flex-grow">
+    <div class="flex flex-wrap items-center">
+      <apartment-card
+        v-for="apartment in apartments"
+        :key="apartment.id"
+        :apartment="apartment"
+        @apartment:edit="editApartment"
+      ></apartment-card>
+    </div>
+    <div class="mt-auto flex justify-center px-2">
+      <r-field>
+        <button
+          class="btn btn-outline-primary"
+          @click="newApartment"
+        ><span class="icon pr-2"><i class="fas fa-plus"></i></span>New apartment</button>
+      </r-field>
+    </div>
     <apartment-form
-      :visible="selectedApartment !== null"
+      :visible="showForm"
       :apartment="selectedApartment"
-      @close="selectedApartment = null"
+      @close="closeForm"
       @apartment:saved="apartmentSaved"
     ></apartment-form>
   </div>
@@ -19,10 +28,12 @@
 import { mapActions, mapState } from "vuex";
 import ApartmentCard from "@/components/cards/ApartmentCard";
 import ApartmentForm from "@/components/apartment/ApartmentForm";
+import RField from "@/components/shared/RField";
 
 export default {
   name: "ApartmentsView",
   components: {
+    RField,
     ApartmentCard,
     ApartmentForm
   },
@@ -31,7 +42,8 @@ export default {
   },
   data() {
     return {
-      selectedApartment: null
+      selectedApartment: null,
+      showForm: false
     };
   },
   computed: {
@@ -43,16 +55,32 @@ export default {
     ...mapActions({
       getApartments: "global/getApartments"
     }),
+    closeForm() {
+      this.showForm = false;
+      this.selectedApartment = null;
+    },
+    newApartment() {
+      this.selectedApartment = null;
+      this.showForm = true;
+    },
     editApartment(apartment) {
       this.selectedApartment = apartment;
+      this.showForm = true;
     },
     apartmentSaved(apartment) {
       this.selectedApartment = null;
-
+      this.showForm = false;
       this.getApartments();
     }
   }
 };
 </script>
-<style lang="scss" scoped>
+<style scoped>
+.placeholder-new {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 24rem;
+  width: 24rem;
+}
 </style>

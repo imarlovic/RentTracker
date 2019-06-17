@@ -3,7 +3,7 @@
     <div class="flex flex-wrap px-2">
       <img
         class="integration-logo pr-4 mb-4"
-        src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Airbnb_Logo_B%C3%A9lo.svg/1280px-Airbnb_Logo_B%C3%A9lo.svg.png"
+        src="/img/logos/airbnb_logo.png"
         alt=""
       >
       <div class="flex items-center mb-4">
@@ -52,7 +52,12 @@
           v-if="status !== 'WORKING'"
           class="btn btn-secondary mr-2"
           @click="tryConfigure"
-        > <i class="pr-2 fas fa-cog"></i>Configure</button>
+        > <span
+            class="pr-2"
+            :class="{ rotate: savingConfig }"
+          >
+            <i class="fas fa-cog"></i>
+          </span>Configure</button>
       </r-field>
     </div>
   </div>
@@ -72,7 +77,8 @@ export default {
     return {
       username: "",
       password: "",
-      syncInProgress: false
+      syncInProgress: false,
+      savingConfig: false
     };
   },
   computed: {
@@ -124,9 +130,12 @@ export default {
     },
     async tryConfigure() {
       try {
+        this.savingConfig = true;
         await this.setupIntegration();
       } catch (e) {
         console.log(e);
+      } finally {
+        this.savingConfig = false;
       }
     },
     async trySync() {

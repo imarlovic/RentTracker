@@ -96,15 +96,15 @@ namespace RentTracker.Service.Utilities
 
             return string.Join(" ", transformedCookies);
         }
-        public static async Task<IEnumerable<Reservation>> GetReservations(IntegrationConfiguration config)
+        public static async Task<IEnumerable<Reservation>> GetReservations(IntegrationConfiguration config, DateTime? start = null, DateTime? end = null)
         {
             var state = JsonConvert.DeserializeObject<JObject>(config.StateJson);
             var ses = state.GetValue("ses").ToObject<string>();
             var cookieParams = state.GetValue("Cookies").ToObject<CookieParam[]>();
             var cookies = BuildCookieHeader(cookieParams);
 
-            var date_from = new DateTime(DateTime.Now.Year, 1, 1).ToString("yyy-MM-dd");
-            var date_to = DateTime.Now.AddMonths(6).ToString("yyy-MM-dd");
+            var date_from = start.HasValue ? start.Value.ToString("yyy-MM-dd") : new DateTime(DateTime.Now.Year, 1, 1).ToString("yyy-MM-dd");
+            var date_to = end.HasValue ? end.Value.ToString("yyy-MM-dd") : DateTime.Now.AddMonths(6).ToString("yyy-MM-dd");
 
             var reservationQueryUrl = $@"https://admin.booking.com/fresa/extranet/reservations/download?date_type=arrival&date_to={date_to}&date_from={date_from}&lang=xu&hotel_id={config.PropertyId}&ses={ses}";
 
@@ -139,16 +139,23 @@ namespace RentTracker.Service.Utilities
                 foreach(var row in table.Rows.Cast<DataRow>())
                 {
                     var booking_number = row.ItemArray[0] as double?;
-                    var booked_by = row.ItemArray[2] as string;
-                    var check_in = row.ItemArray[3] as string;
-                    var check_out = row.ItemArray[4] as string;
-                    var booked_on = row.ItemArray[5] as string;
-                    var status = row.ItemArray[6] as string;
+                    var booked_by = row.ItemArray[1].ToString();
+                    var guest_name = row.ItemArray[2].ToString();
+                    var check_in = row.ItemArray[3].ToString();
+                    var check_out = row.ItemArray[4].ToString();
+                    var booked_on = row.ItemArray[5].ToString();
+                    var status = row.ItemArray[6].ToString();
                     var people = row.ItemArray[8] as double?;
                     var adults = row.ItemArray[9] as double?;
                     var children = row.ItemArray[10] as double?;
-                    var price = row.ItemArray[12] as string;
-                    var commission_amount = row.ItemArray[14] as string;
+                    var price = row.ItemArray[12].ToString();
+                    var commission_amount = row.ItemArray[14].ToString();
+
+                    if(!string.IsNullOrEmpty(booked_by) && booked_by.Contains(' '))
+                    {
+                        booked_by = booked_by.Replace(",", "");
+                        booked_by = string.Join(" ", booked_by.Split(' ').Reverse());
+                    }
 
                     var formatProvider = CultureInfo.GetCultureInfo("en-US");
 
@@ -157,12 +164,12 @@ namespace RentTracker.Service.Utilities
                         Reference = $"{booking_number}",
                         Source = Source.Booking,
                         Currency = Currency.EUR,
-                        Price = decimal.Parse(price?.Replace("EUR", "") ?? "0.0", formatProvider),
-                        Commission = decimal.Parse(commission_amount?.Replace("EUR", "") ?? "0.0", formatProvider),
+                        Price = !string.IsNullOrEmpty(price) ? decimal.Parse(price.Replace("EUR", ""), formatProvider) : 0.0m,
+                        Commission = !string.IsNullOrEmpty(commission_amount) ? decimal.Parse(commission_amount.Replace("EUR", ""), formatProvider) : 0.0m,
                         StartDate = DateTime.ParseExact(check_in, "yyyy-MM-dd", formatProvider),
                         EndDate = DateTime.ParseExact(check_out, "yyyy-MM-dd", formatProvider),
                         BookingDate = DateTime.Parse(booked_on),
-                        HoldingName = booked_by,
+                        HoldingName = !string.IsNullOrEmpty(guest_name) ? guest_name : (!string.IsNullOrEmpty(booked_by) ? booked_by : "N/A"),
                         People = (int?)people.GetValueOrDefault(),
                         Adults = (int?)adults.GetValueOrDefault(),
                         Children = (int?)children.GetValueOrDefault(),

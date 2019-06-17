@@ -62,8 +62,6 @@ export default {
 
       let peopleMap = mapByPeople(reservationsWithPeople);
 
-      console.log(peopleMap);
-
       let labels = Object.keys(peopleMap).filter(
         people =>
           peopleMap[people].length / reservationsWithPeople.length >= 0.1

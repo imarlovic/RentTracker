@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -82,6 +83,8 @@ namespace RentTracker.Web.Controllers
         {
             var specification = new ApartmentReservationsSpecification(apartmentId);
             var reservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
+
+            reservations = reservations.OrderBy(x => x.StartDate);
 
             return Ok(reservations);
         }
@@ -348,9 +351,17 @@ namespace RentTracker.Web.Controllers
 
         // POST api/apartments/{apartmentId}/sync-booking
         [HttpPost("{apartmentId}/sync-booking")]
-        public async Task<ActionResult<IntegrationConfiguration>> SyncBookingReservationsAsync(Guid apartmentId)
+        public async Task<ActionResult<IntegrationConfiguration>> SyncBookingReservationsAsync(Guid apartmentId, [FromQuery] string start = null, [FromQuery] string end = null)
         {
-            var config = await ApartmentService.SyncBookingReservations(apartmentId);
+            var formatProvider = CultureInfo.CurrentCulture;
+
+            var startDateSuccess = DateTime.TryParseExact(start, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime startDate);
+            var endDateSuccess = DateTime.TryParseExact(end, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime endDate);
+
+            DateTime? startDateParam = startDateSuccess ? startDate : default(DateTime?);
+            DateTime? endDateParam = endDateSuccess ? endDate : default(DateTime?);
+
+            var config = await ApartmentService.SyncBookingReservations(apartmentId, startDateParam, endDateParam);
 
             return Ok(config);
         }
@@ -370,9 +381,17 @@ namespace RentTracker.Web.Controllers
 
         // POST api/apartments/{apartmentId}/sync-airbnb
         [HttpPost("{apartmentId}/sync-airbnb")]
-        public async Task<ActionResult<IntegrationConfiguration>> SyncAirbnbReservationsAsync(Guid apartmentId)
+        public async Task<ActionResult<IntegrationConfiguration>> SyncAirbnbReservationsAsync(Guid apartmentId, [FromQuery] string start = null, [FromQuery] string end = null)
         {
-            var config = await ApartmentService.SyncAirbnbReservations(apartmentId);
+            var formatProvider = CultureInfo.CurrentCulture;
+
+            var startDateSuccess = DateTime.TryParseExact(start, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime startDate);
+            var endDateSuccess = DateTime.TryParseExact(end, "yyyy-MM-dd", formatProvider, DateTimeStyles.AssumeLocal, out DateTime endDate);
+
+            DateTime? startDateParam = startDateSuccess ? startDate : default(DateTime?);
+            DateTime? endDateParam = endDateSuccess ? endDate : default(DateTime?);
+
+            var config = await ApartmentService.SyncAirbnbReservations(apartmentId, startDateParam, endDateParam);
 
             return Ok(config);
         }

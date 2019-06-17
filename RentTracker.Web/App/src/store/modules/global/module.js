@@ -9,4 +9,4 @@ export default {
     activeApartment: null,
     apartments: []
   }
-};
+}

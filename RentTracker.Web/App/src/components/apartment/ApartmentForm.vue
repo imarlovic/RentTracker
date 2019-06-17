@@ -23,12 +23,7 @@
           </r-field>
 
           <r-field label="Header Image">
-            <input
-              class="input"
-              type="file"
-              placeholder="Upload image"
-              @change="imageSelected"
-            >
+            <file-input v-model="image"></file-input>
           </r-field>
         </div>
       </div>
@@ -52,12 +47,13 @@
 <script>
 import axios from "axios";
 import RField from "@/components/shared/RField";
+import FileInput from "@/components/shared/FileInput";
 import RModal from "@/components/shared/RModal";
 import { mapActions } from "vuex";
 
 export default {
   name: "ApartmentForm",
-  components: { RField, RModal },
+  components: { RField, FileInput, RModal },
   props: {
     visible: {
       type: Boolean,

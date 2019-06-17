@@ -32,8 +32,6 @@ namespace RentTracker.Web.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Integration Sync Service is starting.");
-
             _integrationSyncTask = RunIntegrationSync(cancellationToken);
 
             return Task.CompletedTask;
@@ -41,6 +39,8 @@ namespace RentTracker.Web.Services
 
         private async Task RunIntegrationSync(CancellationToken cancellationToken)
         {
+            _logger.LogInformation("Integration Sync Service is working...");
+
             do
             {
                 var now = DateTime.Now;

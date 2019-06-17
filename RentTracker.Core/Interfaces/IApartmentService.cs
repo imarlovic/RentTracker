@@ -53,13 +53,13 @@ namespace RentTracker.Core.Interfaces
         #region Booking.com integration
         Task<IntegrationConfiguration> GetBookingIntegrationConfigurationAsync(Guid apartmentId);
         Task<IntegrationConfiguration> SetUpBookingIntegrationAsync(Guid apartmentId, string pulseCode);
-        Task<IntegrationConfiguration> SyncBookingReservations(Guid apartmentId);
+        Task<IntegrationConfiguration> SyncBookingReservations(Guid apartmentId, DateTime? start = null, DateTime? end = null);
         #endregion
 
         #region Airbnb integration
         Task<IntegrationConfiguration> GetAirbnbIntegrationConfigurationAsync(Guid apartmentId);
         Task<IntegrationConfiguration> SetUpAirbnbIntegrationAsync(Guid apartmentId);
-        Task<IntegrationConfiguration> SyncAirbnbReservations(Guid apartmentId);
+        Task<IntegrationConfiguration> SyncAirbnbReservations(Guid apartmentId, DateTime? start = null, DateTime? end = null);
         #endregion
     }
 }

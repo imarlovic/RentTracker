@@ -80,6 +80,7 @@ export default {
             let _date = moment(startOfWeek).add(day, "d");
 
             return {
+              dateEpoch: _date.toDate().valueOf(),
               dayOfYear: _date.dayOfYear(),
               date: _date.toDate(),
               isCurrentMonth: _date.get("month") === selectedMonth

@@ -31,14 +31,14 @@ namespace RentTracker.Web.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Calendar Sync Service is starting.");
-
             _calendarSyncTask = RunCalendarSync(cancellationToken);
 
             return Task.CompletedTask;
         }
         private async Task RunCalendarSync(CancellationToken cancellationToken)
         {
+            _logger.LogInformation("Calendar Sync Service is working...");
+
             do
             {
                 var now = DateTime.Now;

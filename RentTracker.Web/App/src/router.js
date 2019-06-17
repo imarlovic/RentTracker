@@ -7,6 +7,9 @@ const AuthView = () => import(/* webpackChunkName: "AuthView" */ "@/views/AuthVi
 
 const AppView = () => import(/* webpackChunkName: "AppView" */ "@/views/AppView.vue");
 
+const UpcomingView = () =>
+  import(/* webpackChunkName: "UpcomingView" */ "@/views/UpcomingView.vue");
+
 const ApartmentsView = () =>
   import(/* webpackChunkName: "ApartmentsView" */ "@/views/ApartmentsView.vue");
 
@@ -45,6 +48,14 @@ export default new Router({
       path: "/",
       component: AppView,
       children: [
+        {
+          path: "",
+          redirect: "/upcoming"
+        },
+        {
+          path: "upcoming",
+          component: UpcomingView
+        },
         {
           path: "apartments",
           component: ApartmentsView

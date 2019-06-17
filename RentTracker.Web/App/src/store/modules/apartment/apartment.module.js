@@ -12,6 +12,7 @@ export default {
     expenses: [],
     documents: [],
     reservations: [],
+
     airbnbIntegrationConfiguration: null,
     bookingIntegrationConfiguration: null
   }

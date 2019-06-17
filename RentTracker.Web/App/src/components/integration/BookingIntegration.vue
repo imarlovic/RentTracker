@@ -3,7 +3,7 @@
     <div class="flex flex-wrap items-center px-2 ">
       <img
         class="integration-logo pr-4 mb-4"
-        src="https://upload.wikimedia.org/wikipedia/en/thumb/b/be/Booking.com_logo.svg/1280px-Booking.com_logo.svg.png"
+        src="/img/logos/booking_logo.png"
         alt=""
       >
       <div class="flex items-center mb-4">
@@ -61,7 +61,15 @@
           v-if="status !== 'WORKING'"
           class="btn btn-secondary mr-2"
           @click="tryConfigure"
-        > <i class="pr-2 fas fa-cog"></i>Configure</button>
+        >
+          <span
+            class="pr-2"
+            :class="{ rotate: savingConfig }"
+          >
+            <i class="fas fa-cog"></i>
+          </span>
+          Configure
+        </button>
       </r-field>
     </div>
   </div>
@@ -82,7 +90,8 @@ export default {
       propertyId: "",
       password: "",
       pulseCode: "",
-      syncInProgress: false
+      syncInProgress: false,
+      savingConfig: false
     };
   },
   computed: {
@@ -134,9 +143,12 @@ export default {
     },
     async tryConfigure() {
       try {
+        this.savingConfig = true;
         await this.setupIntegration(this.pulseCode);
       } catch (e) {
         console.log(e);
+      } finally {
+        this.savingConfig = false;
       }
     },
     async trySync() {

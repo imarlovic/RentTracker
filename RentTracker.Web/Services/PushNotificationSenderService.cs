@@ -29,8 +29,6 @@ namespace RentTracker.Web.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Push Notification Service is starting.");
-
             _sendNotificationsTask = SendNotificationsAsync();
 
             return Task.CompletedTask;
@@ -38,6 +36,8 @@ namespace RentTracker.Web.Services
 
         private async Task SendNotificationsAsync()
         {
+            _logger.LogInformation("Push Notification Service is working...");
+
             while (!_stopTokenSource.IsCancellationRequested)
             {
                 var pushMessage = await _pushNotificationQueue.DequeueAsync(_stopTokenSource.Token);
@@ -67,13 +67,19 @@ namespace RentTracker.Web.Services
 
                                 await pushClient.SendNotificationAsync(pushSubscription, payload, vapidDetails);
 
-                                Console.WriteLine($"Notification sent: {pushSubscription.Endpoint}");
+                                Console.WriteLine($"Notification successfully sent: {pushSubscription.Endpoint}");
                             }
-                            catch (Exception e)
+                            catch (WebPushException e)
                             {
-                                Console.Error.WriteLine($"Notification failed: {pushSubscription.Endpoint}");
-                                throw e;
-                                _logger.LogError(e, "Failed to send notification.");
+                                if(e.StatusCode == System.Net.HttpStatusCode.Gone)
+                                {
+
+                                    await pushNotificationService.UnsubscribeAsync(e.PushSubscription.Endpoint);
+                                }
+                                else
+                                {
+                                    _logger.LogError(e, $"Notification failed | Endpoint: {pushSubscription.Endpoint} | UserId: {subscription.UserId}");
+                                }
                             }
                         }
                     }

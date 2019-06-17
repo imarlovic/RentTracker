@@ -1,7 +1,9 @@
 <template>
   <div class="app-view">
     <navigation-bar></navigation-bar>
-    <router-view />
+    <div class="content-view">
+      <router-view />
+    </div>
   </div>
 </template>
 <script>
@@ -14,7 +16,15 @@ export default {
     NavigationBar
   },
   mounted() {
-    this.subscribeForPushNotifications();
+    if (!("serviceWorker" in navigator)) {
+      // Service Worker isn't supported on this browser, disable or hide UI.
+      return;
+    } else if (!("PushManager" in window)) {
+      // Push isn't supported on this browser, disable or hide UI.
+      return;
+    } else {
+      this.subscribeForPushNotifications();
+    }
   },
   methods: {
     urlB64ToUint8Array(base64String) {
@@ -29,48 +39,54 @@ export default {
       }
       return outputArray;
     },
-
     async subscribeForPushNotifications() {
-      let applicationServerPublicKey;
-      let existingSubscription;
+      const serviceWorker = await navigator.serviceWorker.ready;
+      if (!serviceWorker) return;
 
-      navigator.serviceWorker.ready.then(async serviceWorker => {
-        existingSubscription = await serviceWorker.pushManager.getSubscription();
+      const permissionResult = await Notification.requestPermission();
+      if (permissionResult != "granted") return;
 
-        if (!existingSubscription) {
-          applicationServerPublicKey = await NotificationsApi.getPublicKey();
+      let existingSubscription = await serviceWorker.pushManager.getSubscription();
 
-          console.log(applicationServerPublicKey);
+      if (!existingSubscription) {
+        let applicationServerPublicKey = await NotificationsApi.getPublicKey();
 
-          if (!applicationServerPublicKey) {
-            console.log("Failed to retrieve application server public key");
-            return;
-          }
+        console.log(applicationServerPublicKey);
 
-          serviceWorker.pushManager
-            .subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: this.urlB64ToUint8Array(
-                applicationServerPublicKey
-              )
-            })
-            .then(pushSubscription => {
-              let pushSubscriptionJson = pushSubscription.toJSON();
-
-              let subscription = {
-                endpoint: pushSubscription.endpoint,
-                p256dh: pushSubscriptionJson.keys.p256dh,
-                auth: pushSubscriptionJson.keys.auth
-              };
-
-              NotificationsApi.subscribe(subscription);
-            })
-            .catch(e => {
-              console.log(e);
-            });
+        if (!applicationServerPublicKey) {
+          console.log("Failed to retrieve application server public key");
+          return;
         }
-      });
+
+        try {
+          const pushSubscription = await serviceWorker.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: this.urlB64ToUint8Array(
+              applicationServerPublicKey
+            )
+          });
+
+          let pushSubscriptionJson = pushSubscription.toJSON();
+
+          let subscription = {
+            endpoint: pushSubscription.endpoint,
+            p256dh: pushSubscriptionJson.keys.p256dh,
+            auth: pushSubscriptionJson.keys.auth
+          };
+
+          await NotificationsApi.subscribe(subscription);
+        } catch (e) {
+          console.log("Failed to subscribe the user for push notifications", e);
+        }
+      }
     }
   }
 };
 </script>
+<style scoped>
+.content-view {
+  max-height: calc(100vh - 62px);
+  min-height: calc(100vh - 62px);
+  overflow: auto;
+}
+</style>

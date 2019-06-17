@@ -21,8 +21,8 @@ namespace RentTracker.Core.Specifications.Reservation
             {
                 var criterias = new List<Expression<Func<Entities.Reservation, bool>>> { DefaultCriteria };
 
-                if (StartDate.HasValue) criterias.Add(e => e.StartDate >= StartDate.Value);
-                if (EndDate.HasValue) criterias.Add(e => e.EndDate <= EndDate.Value);
+                if (StartDate.HasValue) criterias.Add(e => e.StartDate.Date >= StartDate.Value.Date);
+                if (EndDate.HasValue) criterias.Add(e => e.EndDate.Date <= EndDate.Value.Date);
                 if (Source.HasValue) criterias.Add(r => r.Source == Source.Value);
 
                 return criterias;

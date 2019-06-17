@@ -18,21 +18,16 @@
 import { mapState, mapActions } from "vuex";
 import ReservationChart from "@/components/shared/charts/ReservationChart";
 import FormattingFilters from "@/mixins/FormattingFilters";
+import ChartConstants from "@/mixins/ChartConstants";
 import * as moment from "moment";
 import groupBy from "lodash.groupby";
 
 export default {
   name: "MonthlyIncomeChart",
   extends: ReservationChart,
-  mixins: [FormattingFilters],
+  mixins: [FormattingFilters, ChartConstants],
   data() {
     return {
-      monthNames: moment.monthsShort(),
-      seriesColorMap: {
-        RentTracker: "#3182ce",
-        Booking: "#00347c",
-        Airbnb: "#ff5a5f"
-      },
       options: {
         chart: {
           stacked: true,

@@ -1,4 +1,4 @@
-<template>
+v<template>
   <div class="w-full md:w-1/2 flex-shrink-0 flex flex-col">
     <div class="w-full px-6 flex justify-center">
       <span class="text-xl text-gray-800 font-semibold">Monthly profit</span>
@@ -18,13 +18,14 @@
 import { mapState, mapActions } from "vuex";
 import ReservationChart from "@/components/shared/charts/ReservationChart";
 import FormattingFilters from "@/mixins/FormattingFilters";
+import ChartConstants from "@/mixins/ChartConstants";
 import * as moment from "moment";
 import groupBy from "lodash.groupby";
 
 export default {
   name: "MonthlyProfitChart",
   extends: ReservationChart,
-  mixins: [FormattingFilters],
+  mixins: [FormattingFilters, ChartConstants],
   props: {
     expenses: {
       type: Array,
@@ -33,7 +34,6 @@ export default {
   },
   data() {
     return {
-      monthNames: moment.monthsShort(),
       options: {
         colors: ["#48BB78", "#4299E1", "#E53E3E"],
         chart: {

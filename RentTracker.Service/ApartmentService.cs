@@ -149,8 +149,12 @@ namespace RentTracker.Service
 
         public async Task<Reservation> CreateReservationAsync(Reservation entity)
         {
+            var apartment = await GetAsync(entity.ApartmentId);
+
             await UnitOfWork.Repository<Reservation>().Add(entity);
             await UnitOfWork.SaveAsync();
+
+            NotifyReservationCreated(apartment, entity);
 
             return entity;
         }
@@ -281,18 +285,23 @@ namespace RentTracker.Service
                     newReservation.ApartmentId = apartmentId;
                     await UnitOfWork.Repository<Reservation>().Add(newReservation);
 
-                    var pushNotification = new PushNotification(NotificationType.NewReservation)
-                    {
-                        ApartmentId = apartment.Id,
-                        Title = $"You have a new reservation for {newReservation.StartDate.ToString("dd.MM.yyyy.")}",
-                        Body = $"{apartment.Name}{Environment.NewLine}{newReservation.Source} - {newReservation.HoldingName} - {newReservation.StartDate.ToString("dd.MM.yyyy.")}"
-                    };
-
-                    _pushNotificationsQueue.Enqueue(pushNotification);
+                    NotifyReservationCreated(apartment, newReservation);
                 }
             }
 
             await UnitOfWork.SaveAsync();
+        }
+
+        private void NotifyReservationCreated(Apartment apartment, Reservation newReservation)
+        {
+            var pushNotification = new PushNotification(NotificationType.NewReservation)
+            {
+                ApartmentId = apartment.Id,
+                Title = $"You have a new reservation for {newReservation.StartDate.ToString("dd.MM.yyyy.")}",
+                Body = $"{apartment.Name}{Environment.NewLine}{newReservation.Source} - {newReservation.HoldingName} - {newReservation.StartDate.ToString("dd.MM.yyyy.")}"
+            };
+
+            _pushNotificationsQueue.Enqueue(pushNotification);
         }
 
         #endregion
@@ -363,7 +372,7 @@ namespace RentTracker.Service
 
             return config;
         }
-        public async Task<IntegrationConfiguration> SyncBookingReservations(Guid apartmentId)
+        public async Task<IntegrationConfiguration> SyncBookingReservations(Guid apartmentId, DateTime? start = null, DateTime? end = null)
         {
             var config = await GetBookingIntegrationConfigurationAsync(apartmentId);
 
@@ -371,8 +380,8 @@ namespace RentTracker.Service
             {
                 var specification = new ApartmentReservationsSpecification(apartmentId)
                 {
-                    StartDate = new DateTime(DateTime.Now.Year, 1, 1),
-                    EndDate = DateTime.Now.AddMonths(6),
+                    StartDate = start.HasValue ? start.Value.Date : new DateTime(DateTime.Now.Year, 1, 1),
+                    EndDate = end.HasValue ? end.Value.Date : DateTime.Now.AddMonths(6),
                     Source = Source.Booking
                 };
                 var currentReservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
@@ -381,12 +390,12 @@ namespace RentTracker.Service
 
                 try
                 {
-                    externalReservations = await BookingIntegrationHelper.GetReservations(config);
+                    externalReservations = await BookingIntegrationHelper.GetReservations(config, specification.StartDate, specification.EndDate);
                 }
                 catch(AuthenticationException)
                 {
                     config = await SetUpBookingIntegrationAsync(apartmentId);
-                    externalReservations = await BookingIntegrationHelper.GetReservations(config);
+                    externalReservations = await BookingIntegrationHelper.GetReservations(config, specification.StartDate, specification.EndDate);
                 }
 
                 foreach (var reservation in externalReservations)
@@ -420,6 +429,7 @@ namespace RentTracker.Service
 
                 config.Status = IntegrationStatus.Working;
                 config.LastUpdated = DateTime.Now;
+                await UnitOfWork.SaveAsync();
             }
             catch
             {
@@ -470,7 +480,7 @@ namespace RentTracker.Service
 
             return config;
         }
-        public async Task<IntegrationConfiguration> SyncAirbnbReservations(Guid apartmentId)
+        public async Task<IntegrationConfiguration> SyncAirbnbReservations(Guid apartmentId, DateTime? start = null, DateTime? end = null)
         {
             var config = await GetAirbnbIntegrationConfigurationAsync(apartmentId);
 
@@ -478,8 +488,8 @@ namespace RentTracker.Service
             {
                 var specification = new ApartmentReservationsSpecification(apartmentId)
                 {
-                    StartDate = new DateTime(DateTime.Now.Year, 1, 1),
-                    EndDate = DateTime.Now.AddMonths(6),
+                    StartDate = start.HasValue ? start.Value.Date : new DateTime(DateTime.Now.Year, 1, 1),
+                    EndDate = end.HasValue ? end.Value.Date : DateTime.Now.AddMonths(6),
                     Source = Source.Airbnb
                 };
 
@@ -489,12 +499,12 @@ namespace RentTracker.Service
 
                 try
                 {
-                    externalReservations = await AirbnbIntegrationHelper.GetReservations(config);
+                    externalReservations = await AirbnbIntegrationHelper.GetReservations(config, specification.StartDate, specification.EndDate);
                 }
                 catch (AuthenticationException)
                 {
                     config = await SetUpAirbnbIntegrationAsync(apartmentId);
-                    externalReservations = await AirbnbIntegrationHelper.GetReservations(config);
+                    externalReservations = await AirbnbIntegrationHelper.GetReservations(config, specification.StartDate, specification.EndDate);
                 }
 
                 foreach (var reservation in externalReservations)
@@ -529,6 +539,8 @@ namespace RentTracker.Service
 
                 config.Status = IntegrationStatus.Working;
                 config.LastUpdated = DateTime.Now;
+
+                await UnitOfWork.SaveAsync();
             }
             catch
             {

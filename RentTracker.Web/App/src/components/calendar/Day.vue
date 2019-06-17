@@ -44,20 +44,19 @@ export default {
     }
   },
   computed: {
+    ...mapGetters({
+      getStartingReservation: "apartment/getStartingReservation",
+      getEndingReservation: "apartment/getEndingReservation",
+      getInProgressReservation: "apartment/getInProgressReservation"
+    }),
     startingReservation() {
-      return this.$store.getters["apartment/getStartingReservation"](
-        this.day.date
-      );
+      return this.getStartingReservation(this.day.dateEpoch.toString());
     },
     endingReservation() {
-      return this.$store.getters["apartment/getEndingReservation"](
-        this.day.date
-      );
+      return this.getEndingReservation(this.day.dateEpoch.toString());
     },
     inProgressReservation() {
-      return this.$store.getters["apartment/getInProgressReservation"](
-        this.day.date
-      );
+      return this.getInProgressReservation(this.day.dateEpoch.toString());
     },
     title() {
       return this.day.date.toLocaleDateString();

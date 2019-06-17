@@ -44,7 +44,7 @@ export default {
           pie: {
             dataLabels: {
               offset: -40,
-              minAngleToShowLabel: 15
+              minAngleToShowLabel: 10
             }
           }
         }
@@ -54,20 +54,24 @@ export default {
   computed: {
     series() {
       let mapByCountry = collection => groupBy(collection, "country");
+      let reservations = this.reservations.filter(r => r.country != null);
 
-      let countryMap = mapByCountry(this.reservations);
+      let countryMap = mapByCountry(reservations);
 
-      let labels = Object.keys(countryMap).filter(
-        label => countryMap[label].length / this.reservations.length > 0.15
+      let countries = Object.keys(countryMap).filter(
+        country => countryMap[country].length / reservations.length > 0.1
+      );
+
+      let series = countries.map(label => countryMap[label].length);
+
+      countries.push("Other");
+      series.push(
+        reservations.filter(r => !countries.includes(r.country)).length
       );
 
       this.$nextTick(() => {
-        this.$refs.chart.updateOptions({ labels });
+        this.$refs.chart.updateOptions({ labels: countries });
       });
-
-      let series = labels.map(label => countryMap[label].length);
-
-      series = series;
 
       return series;
     }

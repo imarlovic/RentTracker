@@ -1,5 +1,9 @@
 import * as moment from "moment";
 
+const pluralizations = {
+  'child': "ren"
+}
+
 export default {
   filters: {
     money: function (value, currency) {
@@ -30,6 +34,12 @@ export default {
     },
     date: function (date) {
       return moment(date).format('DD.MM.YYYY.')
+    },
+    pluralize: function (text, number) {
+
+      let pluralization = pluralizations[text.toLowerCase()] || 's'
+
+      return number > 1 ? text + pluralization : text
     }
-  }
+  },
 };
