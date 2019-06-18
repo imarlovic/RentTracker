@@ -115,6 +115,8 @@ export default {
         // axios.post(`/auth/login`, formData, {
         //   headers: { "Content-Type": "multipart/form-data" }
         // });
+
+        window.localStorage.removeItem("vuex");
       } else {
         e.preventDefault();
       }

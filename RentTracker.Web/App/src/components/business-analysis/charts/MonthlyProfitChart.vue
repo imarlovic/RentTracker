@@ -47,6 +47,9 @@ export default {
         fill: {
           opacity: 1
         },
+        stroke: {
+          curve: "smooth"
+        },
         tooltip: {
           y: {
             formatter: function(value) {

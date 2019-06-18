@@ -1,6 +1,10 @@
 <template>
-  <div class="h-full flex flex-col p-4 flex-grow">
-    <div class="flex flex-wrap items-center">
+  <div class="h-full flex flex-col flex-grow md:p-4">
+    <loading-indicator v-if="isLoading"></loading-indicator>
+    <div
+      v-else
+      class="flex flex-wrap items-center"
+    >
       <apartment-card
         v-for="apartment in apartments"
         :key="apartment.id"
@@ -28,12 +32,14 @@
 import { mapActions, mapState } from "vuex";
 import ApartmentCard from "@/components/cards/ApartmentCard";
 import ApartmentForm from "@/components/apartment/ApartmentForm";
+import LoadingIndicator from '@/components/shared/LoadingIndicator'
 import RField from "@/components/shared/RField";
 
 export default {
   name: "ApartmentsView",
   components: {
     RField,
+    LoadingIndicator,
     ApartmentCard,
     ApartmentForm
   },
@@ -48,6 +54,7 @@ export default {
   },
   computed: {
     ...mapState({
+      isLoading: state => state.global.status.apartment.loading,
       apartments: state => state.global.apartments
     })
   },

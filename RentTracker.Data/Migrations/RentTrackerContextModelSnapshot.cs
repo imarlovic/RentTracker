@@ -174,9 +174,13 @@ namespace RentTracker.Data.Migrations
 
                     b.Property<Guid>("ApartmentId");
 
-                    b.Property<string>("Name");
+                    b.Property<DateTime?>("LastUpdated");
 
-                    b.Property<string>("Url");
+                    b.Property<string>("Name")
+                        .IsRequired();
+
+                    b.Property<string>("Url")
+                        .IsRequired();
 
                     b.HasKey("Id");
 

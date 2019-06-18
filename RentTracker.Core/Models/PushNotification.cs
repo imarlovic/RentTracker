@@ -19,6 +19,6 @@ namespace RentTracker.Core.Models
     public enum NotificationType
     {
         NewReservation = 0,
-
+        Cancellation = 1
     }
 }

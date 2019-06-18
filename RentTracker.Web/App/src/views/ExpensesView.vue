@@ -1,5 +1,5 @@
 <template>
-  <div class="flex justify-center items-center p-2 md:p-4">
+  <div class="h-full flex flex-col justify-start items-center md:p-4">
     <router-view v-if="activeApartment"></router-view>
     <div
       class="mt-12"

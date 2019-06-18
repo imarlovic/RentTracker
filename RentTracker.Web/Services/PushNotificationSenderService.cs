@@ -17,7 +17,7 @@ namespace RentTracker.Web.Services
         private readonly ILogger _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly IPushNotificationsQueue _pushNotificationQueue;
-        private readonly CancellationTokenSource _stopTokenSource = new CancellationTokenSource();
+        private CancellationTokenSource cancellationTokenSource;
         private Task _sendNotificationsTask;
 
         public PushNotificationSenderService(IServiceProvider serviceProvider, ILogger<PushNotificationSenderService> logger, IPushNotificationsQueue pushNotificationsQueue)
@@ -29,20 +29,22 @@ namespace RentTracker.Web.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _sendNotificationsTask = SendNotificationsAsync();
+            cancellationTokenSource = new CancellationTokenSource();
+
+            _sendNotificationsTask = SendNotificationsAsync(cancellationTokenSource.Token);
 
             return Task.CompletedTask;
         }
 
-        private async Task SendNotificationsAsync()
+        private async Task SendNotificationsAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("Push Notification Service is working...");
 
-            while (!_stopTokenSource.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var pushMessage = await _pushNotificationQueue.DequeueAsync(_stopTokenSource.Token);
+                var pushMessage = await _pushNotificationQueue.DequeueAsync(cancellationToken);
 
-                if (!_stopTokenSource.IsCancellationRequested)
+                if (!cancellationToken.IsCancellationRequested)
                 {
                     using (var scope = _serviceProvider.CreateScope())
                     {
@@ -90,11 +92,11 @@ namespace RentTracker.Web.Services
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
-            _stopTokenSource.Cancel();
-
             _logger.LogInformation("Push Notification Service is stopping.");
 
-            return Task.WhenAny(_sendNotificationsTask, Task.Delay(Timeout.Infinite, cancellationToken));
+            cancellationTokenSource.Cancel();
+
+            return Task.WhenAny(_sendNotificationsTask);
         }
     }
 
@@ -119,9 +121,16 @@ namespace RentTracker.Web.Services
         {
             await _messageEnqueuedSignal.WaitAsync(cancellationToken);
 
-            _messages.TryDequeue(out PushNotification message);
+            if(!cancellationToken.IsCancellationRequested)
+            {
+                _messages.TryDequeue(out PushNotification message);
 
-            return message;
+                return message;
+            }
+            else
+            {
+                return null;
+            }
         }
     }
 }

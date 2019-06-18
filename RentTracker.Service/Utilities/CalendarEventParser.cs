@@ -48,7 +48,8 @@ namespace RentTracker.Service.Utilities
                     StartDate = vEvent.Start.AsSystemLocal,
                     EndDate = vEvent.End.AsSystemLocal,
                     ExternalId = vEvent.Uid,
-                    Source = Source.Other
+                    Source = Source.Other,
+                    State = ReservationState.Active
                 };
 
                 if(vEvent.Uid.EndsWith("@airbnb.com"))

@@ -9,7 +9,7 @@ using RentTracker.Core.Interfaces;
 
 namespace RentTracker.Web.Controllers
 {
-    //[Authorize]
+    [Authorize]
     [Route("api/img")]
     [ApiController]
     public class ImagesController : ControllerBase
@@ -21,6 +21,7 @@ namespace RentTracker.Web.Controllers
         }
 
         // GET api/image/{id}
+        [AllowAnonymous]
         [HttpGet("{id}")]
         public async Task<ActionResult> GetAsync(Guid id)
         {

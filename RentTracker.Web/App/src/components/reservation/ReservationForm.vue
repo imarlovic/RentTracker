@@ -284,7 +284,6 @@ export default {
     },
     "formData.startDate": {
       handler: function(date) {
-        console.log(date);
         if (moment(date).isValid() && this.formData.source === "RentTracker") {
           this.$set(
             this.formData,

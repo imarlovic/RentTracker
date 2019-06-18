@@ -31,7 +31,7 @@ export default {
       default: "2999-12-31"
     },
     value: {
-      type: Date | String,
+      type: [Date, String],
       default: new Date().toString()
     }
   },

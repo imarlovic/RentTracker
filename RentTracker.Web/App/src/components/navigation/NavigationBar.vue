@@ -28,13 +28,17 @@
       <a
         class="nav-link hidden xl:block ml-4 px-4 text-md font-semibold"
         href="/auth/sign-out"
+        @click="clearCache"
       ><span class="icon"><i class="fas fa-sign-out-alt"></i></span></a>
     </div>
     <div
       v-show="drawerOpen"
       class="drawer min-h-screen w-full fixed top-0 left-0 flex flex-col justify-center items-center bg-blue-600"
     >
-      <div class="absolute top-0 text-2xl font-semibold tracking-widest text-white p-4 w-64">
+      <div
+        class="cursor-pointer absolute top-0 text-2xl font-semibold tracking-widest text-white p-4 w-64"
+        @click="toggleDrawer"
+      >
         <!-- RentTracker -->
         <img
           src="/img/logos/renttracker_logo_white.png"
@@ -58,6 +62,7 @@
         <a
           class="p-4 font-semibold"
           href="/auth/sign-out"
+          @click="clearCache"
         > <span class="icon"><i class="fas fa-sign-out-alt"></i></span> Sign out</a>
       </div>
     </div>
@@ -117,6 +122,9 @@ export default {
   methods: {
     toggleDrawer() {
       this.drawerOpen = !this.drawerOpen;
+    },
+    clearCache() {
+      window.localStorage.removeItem("vuex");
     }
   }
 };

@@ -32,7 +32,10 @@
           v-model="password"
         >
       </r-field>
-      <r-field label="Pulse Code">
+      <r-field
+        v-if="status !== 'WORKING'"
+        label="Pulse Code"
+      >
         <input
           placeholder="Pulse Code"
           class="input"

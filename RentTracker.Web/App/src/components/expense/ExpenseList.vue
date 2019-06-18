@@ -1,5 +1,9 @@
 <template>
-  <div class="max-w-5xl w-full flex flex-col justify-center items-center md:pt-8 md:px-4">
+  <loading-indicator v-if="isLoading"></loading-indicator>
+  <div
+    v-else
+    class="max-w-5xl w-full flex flex-col justify-center items-center sm:pt-4 md:pt-8 xl:px-4"
+  >
     <toolbar>
       <month-selector v-model="selectedDate"></month-selector>
       <r-field label="Search">
@@ -12,7 +16,7 @@
         >
       </r-field>
     </toolbar>
-    <div class="container flex justify-start items-end mt-4">
+    <div class="min-w-full container flex justify-start items-end mt-4">
       <button
         class="text-gray-600 ml-1 mr-0 font-semibold hover:text-gray-800"
         @click="createExpense"
@@ -24,21 +28,25 @@
     </div>
     <div
       v-if="filteredExpenses.length > 0"
-      class="container mt-4"
+      class="min-w-full container mt-4"
     >
       <div
         v-for="e in filteredExpenses"
         :key="e.id"
-        class="w-full flex items-center h-12 px-4 mb-2 rounded bg-gray-200 shadow-md text-md"
+        class="w-full flex items-center h-20 md:h-12 px-4 mb-2 rounded bg-gray-200 shadow-md text-xs md:text-sm xl:text-md"
       >
-        <span class="max-w-64 block font-semibold text-gray-800 px-4">{{e.name}}</span>
-        <span
-          class="max-w-64 block font-semibold text-gray-800 px-4"
-          :title="e.description"
-        >{{e.description}}</span>
-        <span class="ml-auto block font-semibold text-gray-800 px-4">{{e.amount | money(e.currency)}}</span>
-        <span class="block font-semibold text-gray-800">{{e.date | date}}</span>
-        <div>
+        <div class="flex flex-col md:flex-row">
+          <span class="max-w-64 block font-bold md:font-semibold text-gray-800 px-4">{{e.name}}</span>
+          <span
+            class="max-w-64 block font-semibold text-gray-800 px-4"
+            :title="e.description"
+          >{{e.description}}</span>
+        </div>
+        <div class="flex flex-col md:flex-row ml-auto text-right">
+          <span class="block font-semibold text-gray-800 md:px-4">{{e.amount | money(e.currency)}}</span>
+          <span class="block font-semibold text-gray-800">{{e.date | date}}</span>
+        </div>
+        <div class="flex">
           <button
             title="Edit"
             class="w-6 h-full text-sm text-gray-600 ml-4 hover:text-gray-800"
@@ -71,8 +79,8 @@ import FormattingFilters from "@/mixins/FormattingFilters";
 import TextSearch from "@/mixins/TextSearch";
 import ExpenseForm from "@/components/expense/ExpenseForm";
 import RField from "@/components/shared/RField";
-import RSelect from "@/components/shared/RSelect";
 import Toolbar from "@/components/shared/Toolbar";
+import LoadingIndicator from "@/components/shared/LoadingIndicator";
 import MonthSelector from "@/components/shared/MonthSelector";
 import * as moment from "moment";
 import debounce from "lodash.debounce";
@@ -82,9 +90,9 @@ export default {
   components: {
     ExpenseForm,
     Toolbar,
+    LoadingIndicator,
     MonthSelector,
-    RField,
-    RSelect
+    RField
   },
   mixins: [FormattingFilters, TextSearch],
   data() {
@@ -96,6 +104,7 @@ export default {
   },
   computed: {
     ...mapState({
+      isLoading: state => state.apartment.status.expense.loading,
       expenses: state => state.apartment.expenses
     }),
     filteredExpenses() {

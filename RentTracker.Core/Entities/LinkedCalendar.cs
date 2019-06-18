@@ -1,19 +1,22 @@
 ﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace RentTracker.Core.Entities
 {
     public class LinkedCalendar : Entity
     {
+        [Required]
         public string Name { get; set; }
+        [Required]
         public string Url { get; set; }
 
+        [Required]
         [ForeignKey("Apartment")]
         public Guid ApartmentId { get; set; }
-        //[JsonConverter(typeof(StringEnumConverter))]
-        //public Source Source { get; set; }
         public Apartment Apartment { get; set; }
+
+        public DateTime? LastUpdated { get; set; }
     }
 }

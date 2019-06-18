@@ -1,4 +1,10 @@
+import merge from 'lodash.merge'
+
 export default {
+  updateStatus(state, status) {
+    if (status) state.status = merge(state.status, status)
+  },
+
   /* Reservation */
   setReservations(state, reservations) {
     state.reservations = reservations || [];

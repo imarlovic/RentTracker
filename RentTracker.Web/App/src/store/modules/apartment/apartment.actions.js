@@ -22,11 +22,14 @@ export default {
   getReservations: ({ commit }, apartmentId) =>
     new Promise(async (resolve, reject) => {
       try {
+        commit('updateStatus', { reservation: { loading: true } })
         let reservations = await ApartmentsApi.getReservations(apartmentId);
         commit("setReservations", reservations);
         resolve(reservations);
       } catch (e) {
         reject(e);
+      } finally {
+        commit('updateStatus', { reservation: { loading: false } })
       }
     }),
   createOrUpdateReservation: ({ commit, rootState }, reservation) =>
@@ -66,6 +69,7 @@ export default {
   getLinkedCalendars: ({ commit, rootState }) =>
     new Promise(async (resolve, reject) => {
       try {
+        commit('updateStatus', { linkedCalendar: { loading: true } })
         let apartmentId = rootState.global.activeApartment.id;
 
         let linkedCalendars = await ApartmentsApi.getLinkedCalendars(apartmentId);
@@ -75,6 +79,8 @@ export default {
         resolve(linkedCalendars);
       } catch (e) {
         reject(e);
+      } finally {
+        commit('updateStatus', { linkedCalendar: { loading: false } })
       }
     }),
   createOrUpdateLinkedCalendar: ({ commit, rootState }, linkedCalendar) =>
@@ -109,9 +115,10 @@ export default {
         reject(e);
       }
     }),
-  syncLinkedCalendar: ({ rootState }, linkedCalendarId) =>
+  syncLinkedCalendar: ({ commit, dispatch, rootState }, linkedCalendarId) =>
     new Promise(async (resolve, reject) => {
       try {
+        commit('updateStatus', { linkedCalendar: { syncing: true } })
         let apartmentId = rootState.global.activeApartment.id;
 
         await ApartmentsApi.syncLinkedCalendar(apartmentId, linkedCalendarId);
@@ -119,6 +126,8 @@ export default {
         resolve();
       } catch (e) {
         reject(e);
+      } finally {
+        commit('updateStatus', { linkedCalendar: { syncing: false } })
       }
     }),
 
@@ -126,6 +135,7 @@ export default {
   getExpenses: ({ commit, rootState }) =>
     new Promise(async (resolve, reject) => {
       try {
+        commit('updateStatus', { expense: { loading: true } })
         let apartmentId = rootState.global.activeApartment.id;
 
         let expenses = await ApartmentsApi.getExpenses(apartmentId);
@@ -135,6 +145,8 @@ export default {
         resolve(expenses);
       } catch (e) {
         reject(e);
+      } finally {
+        commit('updateStatus', { expense: { loading: false } })
       }
     }),
   createOrUpdateExpense: ({ commit, rootState }, expense) =>
@@ -174,6 +186,7 @@ export default {
   getDocuments: ({ commit, rootState }) =>
     new Promise(async (resolve, reject) => {
       try {
+        commit('updateStatus', { document: { loading: true } })
         let apartmentId = rootState.global.activeApartment.id;
 
         let entities = await ApartmentsApi.getDocuments(apartmentId);
@@ -183,6 +196,8 @@ export default {
         resolve(entities);
       } catch (e) {
         reject(e);
+      } finally {
+        commit('updateStatus', { document: { loading: false } })
       }
     }),
   createOrUpdateDocument: ({ commit, rootState }, entity) =>
@@ -222,6 +237,7 @@ export default {
   getIntegrationConfigurations: ({ commit, rootState }) =>
     new Promise(async (resolve, reject) => {
       try {
+        commit('updateStatus', { integrationConfiguration: { loading: true } })
         let apartmentId = rootState.global.activeApartment.id;
 
         let result = await ApartmentsApi.getIntegrationConfigurations(apartmentId);
@@ -231,6 +247,8 @@ export default {
         resolve(result);
       } catch (e) {
         reject(e);
+      } finally {
+        commit('updateStatus', { integrationConfiguration: { loading: false } })
       }
     }),
   createOrUpdateIntegrationConfiguration: ({ commit, rootState }, entity) =>
@@ -254,6 +272,7 @@ export default {
   /* Booking.com */
   setupBookingIntegration: ({ commit, rootState }, pulseCode) => new Promise(async (resolve, reject) => {
     try {
+      commit('updateStatus', { booking: { configuring: true } })
       let apartmentId = rootState.global.activeApartment.id;
 
       let config = await ApartmentsApi.setupBookingIntegration(apartmentId, pulseCode);
@@ -263,10 +282,13 @@ export default {
       resolve(config);
     } catch (e) {
       reject(e);
+    } finally {
+      commit('updateStatus', { booking: { configuring: false } })
     }
   }),
   syncBookingReservations: ({ commit, rootState }) => new Promise(async (resolve, reject) => {
     try {
+      commit('updateStatus', { booking: { syncing: true } })
       let apartmentId = rootState.global.activeApartment.id;
 
       let config = await ApartmentsApi.syncBookingReservations(apartmentId);
@@ -276,11 +298,14 @@ export default {
       resolve(config);
     } catch (e) {
       reject(e);
+    } finally {
+      commit('updateStatus', { booking: { syncing: false } })
     }
   }),
   /* Airbnb */
   setupAirbnbIntegration: ({ commit, rootState }) => new Promise(async (resolve, reject) => {
     try {
+      commit('updateStatus', { airbnb: { configuring: true } })
       let apartmentId = rootState.global.activeApartment.id;
 
       let config = await ApartmentsApi.setupAirbnbIntegration(apartmentId);
@@ -290,10 +315,13 @@ export default {
       resolve(config);
     } catch (e) {
       reject(e);
+    } finally {
+      commit('updateStatus', { airbnb: { configuring: false } })
     }
   }),
   syncAirbnbReservations: ({ commit, rootState }) => new Promise(async (resolve, reject) => {
     try {
+      commit('updateStatus', { airbnb: { syncing: true } })
       let apartmentId = rootState.global.activeApartment.id;
 
       let config = await ApartmentsApi.syncAirbnbReservations(apartmentId);
@@ -303,6 +331,8 @@ export default {
       resolve(config);
     } catch (e) {
       reject(e);
+    } finally {
+      commit('updateStatus', { airbnb: { syncing: false } })
     }
   }),
 };

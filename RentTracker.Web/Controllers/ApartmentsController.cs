@@ -81,7 +81,11 @@ namespace RentTracker.Web.Controllers
         [HttpGet("{apartmentId}/reservations")]
         public async Task<ActionResult<IEnumerable<Reservation>>> GetReservations(Guid apartmentId)
         {
-            var specification = new ApartmentReservationsSpecification(apartmentId);
+            var specification = new ApartmentReservationsSpecification(apartmentId)
+            {
+                State = ReservationState.Active
+            };
+
             var reservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
 
             reservations = reservations.OrderBy(x => x.StartDate);
@@ -94,6 +98,10 @@ namespace RentTracker.Web.Controllers
         public async Task<ActionResult<Reservation>> CreateReservationAsync(Guid apartmentId, [FromBody] Reservation entity)
         {
             entity.ApartmentId = apartmentId;
+            entity.State = ReservationState.Active;
+            entity.StartDate = entity.StartDate.Date;
+            entity.EndDate = entity.EndDate.Date;
+
             var created = await ApartmentService.CreateReservationAsync(entity);
 
             var resourceUri = $"{Request.Path}/{created.Id}";
@@ -108,6 +116,8 @@ namespace RentTracker.Web.Controllers
             if (id != entity.Id) return BadRequest();
 
             entity.ApartmentId = apartmentId;
+            entity.StartDate = entity.StartDate.Date;
+            entity.EndDate = entity.EndDate.Date;
             var updatedEntity = await ApartmentService.UpdateReservationAsync(entity);
 
             return Ok(updatedEntity);

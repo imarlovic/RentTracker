@@ -1,32 +1,38 @@
 <template>
-  <div class="flex flex-col justify-center items-center p-4">
+  <div class="h-full flex flex-col flex-grow md:p-4">
     <template v-if="activeApartment">
       <business-analysis-toolbar v-model="query" />
-      <div class="mt-6 w-full flex flex-wrap flex-row justify-center">
-        <monthly-profit-chart
-          class=""
-          :reservations="filteredReservationsByDate"
-          :expenses="filteredExpensesByDate"
-        ></monthly-profit-chart>
-        <monthly-income-chart
-          class=""
-          :reservations="filteredReservations"
-        ></monthly-income-chart>
-      </div>
+      <loading-indicator v-if="isLoading"></loading-indicator>
+      <div
+        v-else
+        class="w-full flex flex-col justify-start items-center"
+      >
+        <div class="mt-6 w-full flex flex-wrap flex-row justify-center">
+          <monthly-profit-chart
+            class=""
+            :reservations="filteredReservationsByDate"
+            :expenses="filteredExpensesByDate"
+          ></monthly-profit-chart>
+          <monthly-income-chart
+            class=""
+            :reservations="filteredReservations"
+          ></monthly-income-chart>
+        </div>
 
-      <div class="mt-12 w-full flex flex-wrap flex-row justify-center">
-        <source-distribution-chart
-          class=""
-          :reservations="filteredReservationsByDate"
-        ></source-distribution-chart>
-        <guest-number-distribution-chart
-          class=""
-          :reservations="filteredReservations"
-        ></guest-number-distribution-chart>
-        <country-distribution-chart
-          class=""
-          :reservations="filteredReservations"
-        ></country-distribution-chart>
+        <div class="mt-12 w-full flex flex-wrap flex-row justify-center">
+          <source-distribution-chart
+            class=""
+            :reservations="filteredReservationsByDate"
+          ></source-distribution-chart>
+          <guest-number-distribution-chart
+            class=""
+            :reservations="filteredReservations"
+          ></guest-number-distribution-chart>
+          <country-distribution-chart
+            class=""
+            :reservations="filteredReservations"
+          ></country-distribution-chart>
+        </div>
       </div>
     </template>
     <div
@@ -46,6 +52,8 @@ import SourceDistributionChart from "@/components/business-analysis/charts/Sourc
 import GuestNumberDistributionChart from "@/components/business-analysis/charts/GuestNumberDistributionChart";
 import CountryDistributionChart from "@/components/business-analysis/charts/CountryDistributionChart";
 
+import LoadingIndicator from "@/components/shared/LoadingIndicator";
+
 import * as moment from "moment";
 
 export default {
@@ -56,7 +64,8 @@ export default {
     MonthlyProfitChart,
     SourceDistributionChart,
     GuestNumberDistributionChart,
-    CountryDistributionChart
+    CountryDistributionChart,
+    LoadingIndicator
   },
   data() {
     return {
@@ -68,6 +77,9 @@ export default {
       activeApartment: state => state.global.activeApartment
     }),
     ...mapState({
+      isLoading: state =>
+        state.apartment.status.expense.loading &&
+        state.apartment.status.reservation.loading,
       reservations: state => state.apartment.reservations,
       expenses: state => state.apartment.expenses
     }),

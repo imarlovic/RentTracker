@@ -8,7 +8,7 @@ namespace RentTracker.Core.Specifications.Reservation
         public CurrentReservations(Guid apartmentId, Source source) : base()
         {
             DefaultCriteria = r => r.ApartmentId == apartmentId && r.Source == source &&
-                r.StartDate >= DateTime.Now.Date;
+                r.StartDate.Date >= DateTime.Now.Date;
         }
     }
 }

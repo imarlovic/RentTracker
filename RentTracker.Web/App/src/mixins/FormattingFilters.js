@@ -35,6 +35,14 @@ export default {
     date: function (date) {
       return moment(date).format('DD.MM.YYYY.')
     },
+    timeSince: function (date) {
+      if (date) {
+        return moment(date).fromNow()
+      }
+      else {
+        return 'N/A'
+      }
+    },
     pluralize: function (text, number) {
 
       let pluralization = pluralizations[text.toLowerCase()] || 's'

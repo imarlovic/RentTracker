@@ -148,8 +148,16 @@
   position: relative;
 }
 
+.size-sm {
+  @apply text-sm;
+}
+
 .btn.size-sm {
   @apply h-8 text-sm border;
+}
+
+.select.size-sm {
+  @apply h-8 border;
 }
 
 .input {

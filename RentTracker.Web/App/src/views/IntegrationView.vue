@@ -1,11 +1,11 @@
 <template>
-  <div class="flex justify-center items-center p-4">
+  <div class="h-full flex flex-col items-center flex-grow md:p-4">
     <integration-setup v-if="activeApartment"></integration-setup>
     <div
       class="mt-12"
       v-else
     >
-      <h1 class="text-gray-900">Please pick an apartment to see the calendar</h1>
+      <h1 class="text-gray-900">Please pick an apartment to see integration configuration</h1>
     </div>
   </div>
 </template>

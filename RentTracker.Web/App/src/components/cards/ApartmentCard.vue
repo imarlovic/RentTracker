@@ -57,7 +57,7 @@ export default {
     },
     selectApartment(apartment) {
       this.setActiveApartment(apartment);
-      this.$router.push("/calendar");
+      this.$router.push("/");
     }
   }
 };

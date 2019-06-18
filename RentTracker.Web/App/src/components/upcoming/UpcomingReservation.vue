@@ -112,7 +112,7 @@ export default {
   mixins: [FormattingFilters],
   props: {
     reservation: {
-      type: Object | undefined,
+      type: Object,
       required: true
     }
   },

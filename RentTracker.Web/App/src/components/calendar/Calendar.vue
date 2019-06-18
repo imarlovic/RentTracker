@@ -1,8 +1,26 @@
 <template>
-  <div class="max-w-5xl w-full">
+  <loading-indicator v-if="isLoading"></loading-indicator>
+  <div
+    v-else
+    class="max-w-5xl w-full"
+  >
     <toolbar>
       <month-selector v-model="selectedDate"></month-selector>
-      <r-field class="hidden md:block ml-auto">
+      <r-field>
+        <button
+          v-if="linkedCalendars.length > 0"
+          class="btn btn-outline-primary"
+          @click="runSync"
+          :disabled="syncInProgress"
+        >
+          <span class="icon"><i
+              class="fas fa-sync"
+              :class="{ 'rotate': syncInProgress }"
+            ></i></span>
+          Sync
+        </button>
+      </r-field>
+      <r-field class="md:block ml-auto">
         <router-link
           to="/calendar/linked"
           class="btn-link"
@@ -37,12 +55,14 @@
   </div>
 </template>
 <script>
+import { mapState, mapActions } from "vuex";
 import * as moment from "moment";
 import RField from "@/components/shared/RField";
 import Toolbar from "@/components/shared/Toolbar";
 import MonthSelector from "@/components/shared/MonthSelector";
 import ReservationForm from "@/components/reservation/ReservationForm";
 import Day from "@/components/calendar/Day";
+import LoadingIndicator from "@/components/shared/LoadingIndicator";
 
 export default {
   name: "Calendar",
@@ -51,10 +71,15 @@ export default {
     Toolbar,
     MonthSelector,
     ReservationForm,
-    Day
+    Day,
+    LoadingIndicator
+  },
+  mounted() {
+    this.getLinkedCalendars();
   },
   data() {
     return {
+      syncInProgress: false,
       datehint: null,
       selectedDate: new Date(),
       selectedReservation: null,
@@ -62,6 +87,10 @@ export default {
     };
   },
   computed: {
+    ...mapState({
+      linkedCalendars: state => state.apartment.linkedCalendars,
+      isLoading: state => state.apartment.status.reservation.loading
+    }),
     weeks() {
       let selectedMonth = this.selectedDate.getMonth();
       let selectedYear = this.selectedDate.getFullYear();
@@ -95,6 +124,10 @@ export default {
     }
   },
   methods: {
+    ...mapActions({
+      syncLinkedCalendar: "apartment/syncLinkedCalendar",
+      getLinkedCalendars: "apartment/getLinkedCalendars"
+    }),
     newReservation(date) {
       this.datehint = date;
       this.reservationFormVisible = true;
@@ -106,6 +139,17 @@ export default {
     closeReservationForm() {
       this.reservationFormVisible = false;
       this.selectedReservation = null;
+    },
+    runSync() {
+      this.syncInProgress = true;
+
+      let promises = this.linkedCalendars.map(lc =>
+        this.syncLinkedCalendar(lc.id)
+      );
+
+      Promise.all(promises).finally(() => {
+        this.syncInProgress = false;
+      });
     }
   }
 };

@@ -1,5 +1,5 @@
 <template>
-  <div class="max-h-full max-w-full flex justify-center items-start flex-grow">
+  <div class="max-h-full h-full max-w-full flex justify-center items-start flex-grow">
     <upcoming-timeline v-if="activeApartment"></upcoming-timeline>
     <div
       class="mt-12"

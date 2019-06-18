@@ -6,6 +6,11 @@ export default {
   actions,
   mutations,
   state: {
+    status: {
+      apartment: {
+        loading: false
+      }
+    },
     activeApartment: null,
     apartments: []
   }

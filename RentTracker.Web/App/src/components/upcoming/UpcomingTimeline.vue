@@ -1,5 +1,7 @@
 <template>
+  <loading-indicator v-if="isLoading"></loading-indicator>
   <div
+    v-else
     class="container max-w-full md:max-w-5xl flex flex-col justify-center items-center pt-2 px-2"
     @onscroll="(e) => { console.log(e)}"
   >
@@ -66,6 +68,7 @@
 import { mapState } from "vuex";
 import * as moment from "moment";
 import FormattingFilters from "@/mixins/FormattingFilters";
+import LoadingIndicator from "@/components/shared/LoadingIndicator";
 import TimelineBlock from "@/components/upcoming/TimelineBlock";
 import UpcomingReservation from "@/components/upcoming/UpcomingReservation";
 
@@ -73,6 +76,7 @@ export default {
   name: "UpcomingTimeline",
   components: {
     TimelineBlock,
+    LoadingIndicator,
     UpcomingReservation
   },
   mixins: [FormattingFilters],
@@ -84,6 +88,7 @@ export default {
   },
   computed: {
     ...mapState({
+      isLoading: state => state.apartment.status.reservation.loading,
       reservations: state => state.apartment.reservations
     }),
     todaysReservation() {
@@ -142,7 +147,9 @@ export default {
   },
   methods: {
     resetView() {
-      this.$refs.todayBlock.$el.scrollIntoView();
+      if (this.$refs.todayBlock) {
+        this.$refs.todayBlock.$el.scrollIntoView();
+      }
     }
   }
 };

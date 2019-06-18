@@ -242,17 +242,19 @@ namespace RentTracker.Service
             var calendarReservationExternalIdMap = calendarReservations.ToDictionary(r => r.ExternalId);
             var calendarReservationStartDateMap = calendarReservations.ToDictionary(r => r.StartDate.Date);
             var calendarReservationReferenceMap = calendarReservations.Where(r => r.Reference != null).ToDictionary(r => r.Reference);
-            //var calendarReservationMap = calendarReservations.ToDictionary(r => r.ExternalId);
 
             var specification = new CurrentReservations(apartmentId, parser.Source);
-            var existingExternalReservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
-            var existingExternalReservationIds = new HashSet<string>(existingExternalReservations.Select(r => r.ExternalId));
+            var currentReservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
 
-            foreach (var existingReservation in existingExternalReservations)
+            var matchedExternalReservationIds = new HashSet<string>();
+            var createdReservations = new List<Reservation>();
+            var cancelledReservations = new List<Reservation>();
+
+            foreach (var existingReservation in currentReservations)
             {
                 Reservation externalReservation = null;
 
-                if (parser.Source == Source.Airbnb && existingReservation.Reference != null)
+                if (existingReservation.Reference != null)
                     calendarReservationReferenceMap.TryGetValue(existingReservation.Reference, out externalReservation);
 
                 if (externalReservation == null && existingReservation.ExternalId != null)
@@ -261,35 +263,44 @@ namespace RentTracker.Service
                 if (externalReservation == null)
                     calendarReservationStartDateMap.TryGetValue(existingReservation.StartDate.Date, out externalReservation);
 
-
-                if (externalReservation == null) // DELETE
+                if (externalReservation == null && existingReservation.State != ReservationState.Canceled) // CANCELLED
                 {
-                    await UnitOfWork.Repository<Reservation>().Delete(existingReservation);
+                    existingReservation.State = ReservationState.Canceled;
+                    await UnitOfWork.Repository<Reservation>().Update(existingReservation);
+
+                    cancelledReservations.Add(existingReservation);
                 }
-                else // UPDATE
+                else if(externalReservation != null) // UPDATE
                 {
                     existingReservation.StartDate = externalReservation.StartDate;
                     existingReservation.EndDate = externalReservation.EndDate;
                     existingReservation.HoldingName = existingReservation.HoldingName ?? externalReservation.HoldingName;
                     existingReservation.Reference = existingReservation.Reference ?? externalReservation.Reference;
+                    existingReservation.ExternalId = existingReservation.ExternalId ?? externalReservation.ExternalId;
 
                     await UnitOfWork.Repository<Reservation>().Update(existingReservation);
+
+                    matchedExternalReservationIds.Add(externalReservation.ExternalId);
                 }
             }
 
-            foreach (var newReservation in calendarReservations)
+            foreach (var reservation in calendarReservations)
             {
-                var notImported = !existingExternalReservationIds.Contains(newReservation.ExternalId);
-                if (notImported)
+                if(!matchedExternalReservationIds.Contains(reservation.ExternalId)) // ADD
                 {
-                    newReservation.ApartmentId = apartmentId;
-                    await UnitOfWork.Repository<Reservation>().Add(newReservation);
-
-                    NotifyReservationCreated(apartment, newReservation);
-                }
+                    reservation.ApartmentId = apartmentId;
+                    await UnitOfWork.Repository<Reservation>().Add(reservation);
+                    createdReservations.Add(reservation);
+                }                
             }
+
+            linkedCalendar.LastUpdated = DateTime.Now;
+            await UnitOfWork.Repository<LinkedCalendar>().Update(linkedCalendar);
 
             await UnitOfWork.SaveAsync();
+
+            createdReservations.ForEach(r => NotifyReservationCreated(apartment, r));
+            cancelledReservations.ForEach(r => NotifyReservationCancelled(apartment, r));
         }
 
         private void NotifyReservationCreated(Apartment apartment, Reservation newReservation)
@@ -299,6 +310,18 @@ namespace RentTracker.Service
                 ApartmentId = apartment.Id,
                 Title = $"You have a new reservation for {newReservation.StartDate.ToString("dd.MM.yyyy.")}",
                 Body = $"{apartment.Name}{Environment.NewLine}{newReservation.Source} - {newReservation.HoldingName} - {newReservation.StartDate.ToString("dd.MM.yyyy.")}"
+            };
+
+            _pushNotificationsQueue.Enqueue(pushNotification);
+        }
+
+        private void NotifyReservationCancelled(Apartment apartment, Reservation reservation)
+        {
+            var pushNotification = new PushNotification(NotificationType.Cancellation)
+            {
+                ApartmentId = apartment.Id,
+                Title = $"Cancellation: {reservation.Source} {apartment.Name}",
+                Body = $"{reservation.HoldingName} - {reservation.StartDate.ToString("dd.MM.yyyy.")}"
             };
 
             _pushNotificationsQueue.Enqueue(pushNotification);
@@ -375,6 +398,7 @@ namespace RentTracker.Service
         public async Task<IntegrationConfiguration> SyncBookingReservations(Guid apartmentId, DateTime? start = null, DateTime? end = null)
         {
             var config = await GetBookingIntegrationConfigurationAsync(apartmentId);
+            var apartment = await GetAsync(apartmentId);
 
             try
             {
@@ -384,9 +408,10 @@ namespace RentTracker.Service
                     EndDate = end.HasValue ? end.Value.Date : DateTime.Now.AddMonths(6),
                     Source = Source.Booking
                 };
-                var currentReservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
+                var currentReservations = (await UnitOfWork.Repository<Reservation>().FindBySpecification(specification)).ToArray();
 
                 IEnumerable<Reservation> externalReservations;
+                var createdReservations = new List<Reservation>();
 
                 try
                 {
@@ -402,12 +427,14 @@ namespace RentTracker.Service
                 {
                     var existingReservation = currentReservations.Where(r => r.Reference == reservation.Reference || r.StartDate == reservation.StartDate).FirstOrDefault();
 
-                    if(existingReservation == null)
+                    if(existingReservation == null) // ADD
                     {
                         reservation.ApartmentId = apartmentId;
                         await UnitOfWork.Repository<Reservation>().Add(reservation);
+
+                        createdReservations.Add(reservation);
                     }
-                    else
+                    else // UPDATE
                     {
                         existingReservation.HoldingName = reservation.HoldingName;
                         existingReservation.Reference = reservation.Reference;
@@ -430,6 +457,8 @@ namespace RentTracker.Service
                 config.Status = IntegrationStatus.Working;
                 config.LastUpdated = DateTime.Now;
                 await UnitOfWork.SaveAsync();
+
+                createdReservations.ForEach(r => NotifyReservationCreated(apartment, r));
             }
             catch
             {
@@ -483,6 +512,7 @@ namespace RentTracker.Service
         public async Task<IntegrationConfiguration> SyncAirbnbReservations(Guid apartmentId, DateTime? start = null, DateTime? end = null)
         {
             var config = await GetAirbnbIntegrationConfigurationAsync(apartmentId);
+            var apartment = await GetAsync(apartmentId);
 
             try
             {
@@ -493,9 +523,10 @@ namespace RentTracker.Service
                     Source = Source.Airbnb
                 };
 
-                var currentReservations = await UnitOfWork.Repository<Reservation>().FindBySpecification(specification);
+                var currentReservations = (await UnitOfWork.Repository<Reservation>().FindBySpecification(specification)).ToArray();
 
                 IEnumerable<Reservation> externalReservations;
+                var createdReservations = new List<Reservation>();
 
                 try
                 {
@@ -509,14 +540,14 @@ namespace RentTracker.Service
 
                 foreach (var reservation in externalReservations)
                 {
-                    var existingReservation = currentReservations.Where(r => r.Reference == reservation.Reference || r.StartDate == reservation.StartDate).FirstOrDefault();
+                    var existingReservation = currentReservations.Where(r => r.Reference == reservation.Reference || r.StartDate.Date == reservation.StartDate.Date).FirstOrDefault();
 
-                    if (existingReservation == null)
+                    if (existingReservation == null) // ADD
                     {
                         reservation.ApartmentId = apartmentId;
                         await UnitOfWork.Repository<Reservation>().Add(reservation);
                     }
-                    else
+                    else // UPDATE
                     {
                         existingReservation.HoldingName = reservation.HoldingName;
                         existingReservation.Reference = reservation.Reference;
@@ -541,6 +572,8 @@ namespace RentTracker.Service
                 config.LastUpdated = DateTime.Now;
 
                 await UnitOfWork.SaveAsync();
+
+                createdReservations.ForEach(r => NotifyReservationCreated(apartment, r));
             }
             catch
             {

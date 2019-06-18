@@ -122,7 +122,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\IdentityServer\IdentityServer.csproj" />
     <ProjectReference Include="..\RentTracker.Data\RentTracker.Data.csproj" />
     <ProjectReference Include="..\RentTracker.Service\RentTracker.Service.csproj" />
   </ItemGroup>

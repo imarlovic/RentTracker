@@ -17,21 +17,22 @@ namespace RentTracker.Web.Services
         private readonly IServiceProvider _serviceProvider;
 
         private CrontabSchedule _schedule;
-        private DateTime _nextRun;
-        protected const string _cronExpression = "15 * * * *";
+        protected const string _cronExpression = "5,20,35,50 * * * *";
         private Task _calendarSyncTask;
+        private CancellationTokenSource cancellationTokenSource;
 
         public CalendarSyncService(IServiceProvider serviceProvider, ILogger<CalendarSyncService> logger)
         {
             _logger = logger;
             _serviceProvider = serviceProvider;
             _schedule = CrontabSchedule.Parse(_cronExpression);
-            _nextRun = _schedule.GetNextOccurrence(DateTime.Now);
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _calendarSyncTask = RunCalendarSync(cancellationToken);
+            cancellationTokenSource = new CancellationTokenSource();
+
+            _calendarSyncTask = RunCalendarSync(cancellationTokenSource.Token);
 
             return Task.CompletedTask;
         }
@@ -39,10 +40,11 @@ namespace RentTracker.Web.Services
         {
             _logger.LogInformation("Calendar Sync Service is working...");
 
+            var now = DateTime.Now;
+            var _nextRun = _schedule.GetNextOccurrence(now);
+
             do
             {
-                var now = DateTime.Now;
-                _nextRun = _schedule.GetNextOccurrence(now);
                 if (now > _nextRun)
                 {
                     _logger.LogInformation("Calendar sync in progress .");
@@ -60,10 +62,17 @@ namespace RentTracker.Web.Services
                     }
 
                     _nextRun = _schedule.GetNextOccurrence(DateTime.Now);
+
+                    _logger.LogInformation($"Calendar sync in finished. Next run: {_nextRun}");
                 }
+
                 await Task.Delay(30000, cancellationToken); //30 second delay
+
+                now = DateTime.Now;
             }
             while (!cancellationToken.IsCancellationRequested);
+
+            _logger.LogInformation("Calendar sync task cancelled.");
         }
 
         private async Task SyncCalendar(LinkedCalendar calendar)
@@ -79,7 +88,9 @@ namespace RentTracker.Web.Services
         {
             _logger.LogInformation("Calendar Sync Service is stopping.");
 
-            return Task.CompletedTask;
+            cancellationTokenSource.Cancel();
+
+            return Task.WhenAny(_calendarSyncTask);
         }
     }
 }

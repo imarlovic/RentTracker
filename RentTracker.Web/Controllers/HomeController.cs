@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using IdentityServer4.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -11,7 +8,7 @@ using RentTracker.Web.Models;
 
 namespace RentTracker.Web.Controllers
 {
-    
+
     [Authorize]
     public class HomeController : Controller
     {

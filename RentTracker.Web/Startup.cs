@@ -52,6 +52,7 @@ namespace RentTracker.Web
                 .AddJsonOptions(options =>
                 {
                     options.SerializerSettings.NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore;
+                    options.SerializerSettings.DateTimeZoneHandling = Newtonsoft.Json.DateTimeZoneHandling.Local;
                 });
 
             #region IdentityServer configuration
@@ -145,8 +146,12 @@ namespace RentTracker.Web
 
             #region Hosted services configuration
 
-            services.AddHostedService<CalendarSyncService>();
-            services.AddHostedService<IntegrationSyncService>();
+            if (Environment.IsProduction())
+            {
+                services.AddHostedService<CalendarSyncService>();
+                services.AddHostedService<IntegrationSyncService>();
+            }
+           
             services.AddHostedService<PushNotificationSenderService>();
 
             #endregion

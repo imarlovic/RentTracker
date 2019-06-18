@@ -17,22 +17,22 @@ namespace RentTracker.Web.Services
         private readonly IServiceProvider _serviceProvider;
 
         private CrontabSchedule _schedule;
-        private DateTime _nextRun;
-        protected const string _cronExpression = "* 6,18 * * *";
+        protected const string _cronExpression = "* 6,12,18 * * *";
         private Task _integrationSyncTask;
-
+        private CancellationTokenSource cancellationTokenSource;
 
         public IntegrationSyncService(IServiceProvider serviceProvider, ILogger<IntegrationSyncService> logger)
         {
             _logger = logger;
             _serviceProvider = serviceProvider;
             _schedule = CrontabSchedule.Parse(_cronExpression);
-            _nextRun = _schedule.GetNextOccurrence(DateTime.Now);
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _integrationSyncTask = RunIntegrationSync(cancellationToken);
+            cancellationTokenSource = new CancellationTokenSource();
+
+            _integrationSyncTask = RunIntegrationSync(cancellationTokenSource.Token);
 
             return Task.CompletedTask;
         }
@@ -41,10 +41,11 @@ namespace RentTracker.Web.Services
         {
             _logger.LogInformation("Integration Sync Service is working...");
 
+            var now = DateTime.Now;
+            var _nextRun = _schedule.GetNextOccurrence(now);
+
             do
             {
-                var now = DateTime.Now;
-                var _nextRun = _schedule.GetNextOccurrence(now);
                 if (now > _nextRun)
                 {
                     using (var scope = _serviceProvider.CreateScope())
@@ -62,10 +63,17 @@ namespace RentTracker.Web.Services
                     }
 
                     _nextRun = _schedule.GetNextOccurrence(DateTime.Now);
+
+                    _logger.LogInformation($"Integration Sync in finished. Next run: {_nextRun}");
                 }
+
                 await Task.Delay(60000, cancellationToken); //1 minute delay
+
+                now = DateTime.Now;
             }
             while (!cancellationToken.IsCancellationRequested);
+
+            _logger.LogInformation("Integration Sync task cancelled.");
         }
 
         private async Task SyncIntegration(IntegrationConfiguration config)
@@ -90,7 +98,9 @@ namespace RentTracker.Web.Services
         {
             _logger.LogInformation("Integration Sync Service is stopping.");
 
-            return Task.CompletedTask;
+            cancellationTokenSource.Cancel();
+
+            return Task.WhenAny(_integrationSyncTask);
         }
     }
 }

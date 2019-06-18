@@ -1,4 +1,4 @@
-importScripts("/precache-manifest.785946fd9bb72ddee90067d4a51d803b.js", "https://storage.googleapis.com/workbox-cdn/releases/3.6.3/workbox-sw.js");
+importScripts("/precache-manifest.ef6da443d6bde1f2298eaacce8bf9c71.js", "https://storage.googleapis.com/workbox-cdn/releases/3.6.3/workbox-sw.js");
 
 
 
@@ -54,7 +54,22 @@ self.addEventListener('push', function (event) {
 
     event.waitUntil(self.registration.showNotification(title, {
       body: body,
-      icon: '/img/icons/favicon-32x32.png'
+      icon: '/img/icons/icon-192x192.png'
     }));
+  }
+});
+
+self.addEventListener('message', (e) => {
+  if (!e.data) {
+    return;
+  }
+
+  switch (e.data) {
+    case 'skipWaiting':
+      self.skipWaiting();
+      break;
+    default:
+      // NOOP
+      break;
   }
 });

@@ -8,6 +8,26 @@ export default {
   mutations,
   getters,
   state: {
+    status: {
+      linkedCalendar: {
+        loading: false,
+        syncing: false
+      },
+      expense: {
+        loading: false
+      },
+      document: {
+        loading: false,
+      },
+      reservation: {
+        loading: false
+      },
+      integrationConfiguration: {
+        loading: false,
+      }
+    },
+
+
     linkedCalendars: [],
     expenses: [],
     documents: [],

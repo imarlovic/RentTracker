@@ -4,12 +4,8 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using IdentityModel;
-using IdentityServer;
-using IdentityServer4;
-using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdentityServer4.Stores;
-using IdentityServer4.Test;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -54,7 +50,7 @@ namespace RentTracker.Web.Controllers
         /// Handle postback from username/password login
         /// </summary>
         [HttpPost("login")]
-        public async Task<IActionResult> Login(IdentityServer.LoginInputModel model)
+        public async Task<IActionResult> Login(LoginInputModel model)
         {
 
             if (ModelState.IsValid)
