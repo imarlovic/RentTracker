@@ -5,6 +5,11 @@
       v-else
       class="flex flex-wrap items-center"
     >
+      <div
+        v-if="!activeApartment"
+        class="w-full px-6 py-4 text-xl font-semibold text-gray-700"
+      >Select an apartment to continue</div>
+
       <apartment-card
         v-for="apartment in apartments"
         :key="apartment.id"
@@ -32,7 +37,7 @@
 import { mapActions, mapState } from "vuex";
 import ApartmentCard from "@/components/cards/ApartmentCard";
 import ApartmentForm from "@/components/apartment/ApartmentForm";
-import LoadingIndicator from '@/components/shared/LoadingIndicator'
+import LoadingIndicator from "@/components/shared/LoadingIndicator";
 import RField from "@/components/shared/RField";
 
 export default {
@@ -54,6 +59,7 @@ export default {
   },
   computed: {
     ...mapState({
+      activeApartment: state => state.global.activeApartment,
       isLoading: state => state.global.status.apartment.loading,
       apartments: state => state.global.apartments
     })

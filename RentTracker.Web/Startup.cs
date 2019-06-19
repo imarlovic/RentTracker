@@ -15,7 +15,10 @@ using RentTracker.Service;
 using RentTracker.Web.Services;
 using System;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 using WebPush;
 
 namespace RentTracker.Web
@@ -45,6 +48,8 @@ namespace RentTracker.Web
         public void ConfigureServices(IServiceCollection services)
         {
             var dbConnectionString = Configuration.GetConnectionString("DB");
+            var migrationsAssembly = typeof(RentTrackerContext).GetTypeInfo().Assembly.GetName().Name;
+
             var authority = Configuration.GetSection("Authentication")?.GetValue<string>("authority");
 
             services.AddMvc()
@@ -57,9 +62,20 @@ namespace RentTracker.Web
 
             #region IdentityServer configuration
 
-            var builder = services.AddIdentityServer(options =>
+            var identityServerBuilder = services.AddIdentityServer(options =>
             {
                 options.UserInteraction.LoginUrl = "/auth/login";
+            })
+            .AddOperationalStore(options =>
+            {
+                options.DefaultSchema = "dbo";
+                options.ConfigureDbContext = builder =>
+                    builder.UseSqlServer(dbConnectionString,
+                        sql => sql.MigrationsAssembly(migrationsAssembly));
+
+                // this enables automatic token cleanup. this is optional.
+                options.EnableTokenCleanup = true;
+                options.TokenCleanupInterval = 30; // interval in seconds
             })
             .AddInMemoryIdentityResources(Config.GetIdentityResources())
             .AddInMemoryApiResources(Config.GetApis())
@@ -68,7 +84,7 @@ namespace RentTracker.Web
 
             if (Environment.IsDevelopment())
             {
-                builder.AddDeveloperSigningCredential();
+                identityServerBuilder.AddDeveloperSigningCredential();
             }
             else
             {
@@ -87,7 +103,7 @@ namespace RentTracker.Web
 
                 if (cert == null) throw new Exception("Certificate not found!");
 
-                builder.AddSigningCredential(cert);
+                identityServerBuilder.AddSigningCredential(cert);
             }
 
             #endregion
@@ -104,6 +120,21 @@ namespace RentTracker.Web
             .AddCookie("Cookies")
             .AddOpenIdConnect("oidc", options =>
             {
+                options.Events.OnRedirectToIdentityProvider = context =>
+                {
+                    if (context.Request.Path.StartsWithSegments("/api"))
+                    {
+                        if (context.Response.StatusCode == (int)HttpStatusCode.OK)
+                        {
+                            context.ProtocolMessage.State = options.StateDataFormat.Protect(context.Properties);
+                            context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+                            context.Response.Headers["Location"] = context.ProtocolMessage.CreateAuthenticationRequestUrl();
+                        }
+                        context.HandleResponse();
+                    }
+                    return Task.CompletedTask;
+                };
+
                 options.SignInScheme = "Cookies";
 
                 options.Authority = authority;

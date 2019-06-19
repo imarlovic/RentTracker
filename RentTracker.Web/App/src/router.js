@@ -1,7 +1,10 @@
 import Vue from "vue";
 import Router from "vue-router";
+import store from '@/store/store'
 
 Vue.use(Router);
+
+const storeInstance = store;
 
 const AuthView = () => import(/* webpackChunkName: "AuthView" */ "@/views/AuthView.vue");
 
@@ -36,7 +39,7 @@ const DocumentsView = () =>
 const DocumentList = () =>
   import(/* webpackChunkName: "DocumentsView" */ "@/components/document/DocumentList.vue");
 
-export default new Router({
+const router = new Router({
   mode: "history",
   base: process.env.BASE_URL,
   routes: [
@@ -47,6 +50,9 @@ export default new Router({
     {
       path: "/",
       component: AppView,
+      meta: {
+        needsApartment: true
+      },
       children: [
         {
           path: "",
@@ -106,3 +112,13 @@ export default new Router({
     }
   ]
 });
+
+router.beforeEach((to, from, next) => {
+  if(to.path !== '/apartments' && !storeInstance.state.global.activeApartment && to.matched.some(r => r.meta.needsApartment)) {
+    next('/apartments')
+  } else {
+    next()
+  }
+})
+
+export default router;

@@ -71,3 +71,8 @@ self.addEventListener('message', (e) => {
       break;
   }
 });
+
+self.addEventListener('install', function (event) {
+
+    self.skipWaiting();
+});

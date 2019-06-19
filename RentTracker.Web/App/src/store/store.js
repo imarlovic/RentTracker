@@ -8,10 +8,10 @@ import reservation from "./modules/reservation/module";
 
 Vue.use(Vuex);
 
-export default new Vuex.Store({
+const store = new Vuex.Store({
   plugins: [
     createPersistedState({
-      paths: ["global"]
+      paths: ["global", "apartment"]
     })
   ],
   modules: {
@@ -23,3 +23,5 @@ export default new Vuex.Store({
   mutations: {},
   actions: {}
 });
+
+export default store

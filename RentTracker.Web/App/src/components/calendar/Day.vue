@@ -1,11 +1,15 @@
 <template>
   <div
     :title="title"
-    class="day relative border border-gray-400 hover:bg-gray-200 hover:border-2"
+    class="day relative border-gray-400 hover:bg-gray-200"
     :class="dayClasses"
     :style="dayStyle"
     @click="triggerAction"
   >
+    <div
+      v-if="isToday"
+      class="today-outline border border-blue-600"
+    ></div>
     <span class="absolute top-0 left-0 p-1 md:p-2 font-bold text-xs md:text-md">{{dayOfMonth}}</span>
     <div
       @click="openReservation(startingReservation)"
@@ -63,6 +67,9 @@ export default {
     },
     dayOfMonth() {
       return this.day.date.getDate();
+    },
+    isToday() {
+      return moment().isSame(this.day.date, "day");
     },
     dayClasses() {
       let classes = [];
@@ -126,32 +133,48 @@ export default {
   }
 };
 </script>
-<style lang="scss" scoped>
+<style scoped>
+.today-outline {
+  position: absolute;
+  width: calc(100% + 1px);
+  height: calc(100% + 1px);
+}
+
+.day {
+  box-sizing: border-box;
+  border-right-width: 1px;
+}
+
+.day:first-child {
+  border-left-width: 1px;
+}
+
 .reservation-ribbon {
   background-color: #90cdf4;
   position: absolute;
-  bottom: 16px;
+  transform: translate(0px, 16px);
   height: 28px;
-  width: calc(100%);
+  width: calc(100% + 2px);
 
   transition: box-shadow 150ms ease-out;
 }
 
 .reservation-ribbon:hover {
-  // transform: translate(0px, -3px);
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3),
     0 4px 6px -2px rgba(0, 0, 0, 0.35);
 }
 
 .reservation-ribbon.first-day {
-  width: 50%;
+  transform: translate(0px, 16px);
+  width: calc(50% + 1px);
   left: 50%;
   border-top-left-radius: 2rem;
   border-bottom-left-radius: 2rem;
 }
 
 .reservation-ribbon.last-day {
-  width: 50%;
+  transform: translate(0px, 16px);
+  width: calc(50% + 1px);
   right: 50%;
   border-top-right-radius: 2rem;
   border-bottom-right-radius: 2rem;
@@ -177,8 +200,16 @@ export default {
 
 @media only screen and (max-width: 640px) {
   .reservation-ribbon {
-    bottom: 8px;
+    transform: translate(0px, 8px);
     height: 22px;
+  }
+
+  .reservation-ribbon.first-day {
+    transform: translate(0px, 8px);
+  }
+
+  .reservation-ribbon.last-day {
+    transform: translate(0px, 8px);
   }
 
   .guest-icon {

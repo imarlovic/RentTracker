@@ -5,6 +5,15 @@ const baseDomain = "/api";
 // The base URL is empty this time due we are using the jsonplaceholder API
 const baseURL = `${baseDomain}`;
 
-export default axios.create({
-  baseURL
+const api = axios.create({
+  baseURL,
 });
+
+api.interceptors.response.use(function (response) {
+  return response;
+}, function (error) {
+  if (error.response.status === 401) window.location.replace(`/auth/login?redirectUrl=${window.location.pathname}`)
+  return Promise.reject(error)
+});
+
+export default api;

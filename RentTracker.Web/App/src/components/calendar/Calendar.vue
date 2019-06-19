@@ -163,8 +163,12 @@ export default {
   display: flex;
   justify-content: space-around;
   align-items: center;
-
+  border-bottom-width: 1px;
   /* line-height: 30px; */
+}
+
+.week:first-child {
+  border-top-width: 1px;
 }
 
 .day {
