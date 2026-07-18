@@ -1,6 +1,6 @@
 export type Env = {
   DB: D1Database
-  FILES: R2Bucket
+  FILES?: R2Bucket
   GOOGLE_CLIENT_ID: string
   JWT_SECRET: string
   JWT_ISSUER: string

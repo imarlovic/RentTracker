@@ -49,21 +49,39 @@ Open `http://localhost:5173`. The Vite Cloudflare plugin serves the SPA and runs
 
 ## Cloudflare setup
 
-1. Create a D1 database and put its id in `wrangler.jsonc` → `d1_databases[0].database_id`
-2. Create an R2 bucket named `renttracker-files` (or update `bucket_name`)
+1. Create a D1 database:
+
+```bash
+npx wrangler d1 create renttracker
+```
+
+Put the returned `database_id` in `wrangler.jsonc`.
+
+2. (Optional later) Create an R2 bucket for documents/images and add an `r2_buckets` binding named `FILES`.
+
 3. Set secrets:
 
 ```bash
 npx wrangler secret put JWT_SECRET
 ```
 
-4. Set `GOOGLE_CLIENT_ID` in `wrangler.jsonc` `vars` (or as a secret)
+4. Set `GOOGLE_CLIENT_ID` in `wrangler.jsonc` `vars` (or as a secret).
+
 5. Apply migrations and deploy:
 
 ```bash
 npm run db:migrate:remote
 npm run deploy
 ```
+
+### Preview deploy (this release)
+
+A temporary Cloudflare preview Worker was published for tag `2.0.0`:
+
+- **URL:** https://renttracker.illustrious-lunch.workers.dev  
+- **Claim (60 min):** https://dash.cloudflare.com/claim-preview?claimToken=Pc7Rbent-iLGWkk6LsmI6XbmlA7AhJsddtu5ntjhdL4  
+
+Claim the preview account in the Cloudflare dashboard to keep it, then replace placeholder Google client ID / JWT secret / D1 id with your production values.
 
 ## Auth flow
 
