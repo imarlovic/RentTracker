@@ -16,7 +16,7 @@
     }
   ],
   "vars": {
-    "GOOGLE_CLIENT_ID": "REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID",
+    "GOOGLE_CLIENT_ID": "658207955903-gh23kfhhir9s6u6tsn5rqnkqsck12pss.apps.googleusercontent.com",
     "JWT_ISSUER": "renttracker",
     "JWT_AUDIENCE": "renttracker-web"
   }
