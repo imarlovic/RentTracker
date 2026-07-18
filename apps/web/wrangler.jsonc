@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "renttracker",
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker/index.ts",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "renttracker",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "vars": {
+    "GOOGLE_CLIENT_ID": "658207955903-gh23kfhhir9s6u6tsn5rqnkqsck12pss.apps.googleusercontent.com",
+    "JWT_ISSUER": "renttracker",
+    "JWT_AUDIENCE": "renttracker-web"
+  }
+}
