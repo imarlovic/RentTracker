@@ -17,7 +17,7 @@ export function LoginPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">RentTracker</p>
           <CardTitle className="text-3xl">Sign in to continue</CardTitle>
           <CardDescription>
-            Google authentication only. Local passwords and IdentityServer are gone in 2.0.
+            Google authentication only. Signed-in sessions use an app JWT issued by the Cloudflare Worker API.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">

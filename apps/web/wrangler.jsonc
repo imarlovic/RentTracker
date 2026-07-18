@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "renttracker",
+  "compatibility_date": "2026-07-18",
+  "main": "./worker/index.ts",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "renttracker",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "renttracker-files"
+    }
+  ],
+  "vars": {
+    "GOOGLE_CLIENT_ID": "REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID",
+    "JWT_ISSUER": "renttracker",
+    "JWT_AUDIENCE": "renttracker-web"
+  }
+  // Set JWT_SECRET via `wrangler secret put JWT_SECRET` (min 32 chars).
+  // For local dev, use .dev.vars
+}
