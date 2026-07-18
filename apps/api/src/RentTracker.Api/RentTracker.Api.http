@@ -1,0 +1,12 @@
+@host = http://localhost:5080
+
+### Health
+GET {{host}}/api/health
+
+### Google sign-in (paste a real Google ID token)
+POST {{host}}/api/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "GOOGLE_ID_TOKEN"
+}
