@@ -1,11 +1,15 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import type { MiddlewareHandler } from 'hono'
 import { verifyAppJwt } from './auth'
 import type { Env, Variables } from './env'
 import { apartmentRoutes } from './routes/apartments'
 import { authRoutes } from './routes/auth'
+import { notificationRoutes } from './routes/notifications'
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>()
+type AppEnv = { Bindings: Env; Variables: Variables }
+
+const app = new Hono<AppEnv>()
 
 app.use('/api/*', cors())
 
@@ -17,12 +21,11 @@ app.get('/api/health', (c) =>
   }),
 )
 
-app.use('/api/auth/me', async (c, next) => {
+const withAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const header = c.req.header('Authorization')
   if (!header?.startsWith('Bearer ')) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
-
   try {
     const { userId } = await verifyAppJwt(c.env, header.slice(7))
     c.set('userId', userId)
@@ -30,41 +33,23 @@ app.use('/api/auth/me', async (c, next) => {
   } catch {
     return c.json({ error: 'Unauthorized' }, 401)
   }
-})
+}
 
-app.use('/api/apartments/*', async (c, next) => {
-  const header = c.req.header('Authorization')
-  if (!header?.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
+app.use('/api/auth/me', withAuth)
+app.use('/api/apartments', withAuth)
+app.use('/api/apartments/*', withAuth)
 
-  try {
-    const { userId } = await verifyAppJwt(c.env, header.slice(7))
-    c.set('userId', userId)
+app.use('/api/notifications/*', async (c, next) => {
+  if (c.req.path.endsWith('/public-key')) {
     await next()
-  } catch {
-    return c.json({ error: 'Unauthorized' }, 401)
+    return
   }
-})
-
-// Also protect exact /api/apartments (list/create)
-app.use('/api/apartments', async (c, next) => {
-  const header = c.req.header('Authorization')
-  if (!header?.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
-  try {
-    const { userId } = await verifyAppJwt(c.env, header.slice(7))
-    c.set('userId', userId)
-    await next()
-  } catch {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
+  return withAuth(c, next)
 })
 
 app.route('/api/auth', authRoutes)
 app.route('/api/apartments', apartmentRoutes)
+app.route('/api/notifications', notificationRoutes)
 
 app.notFound((c) => {
   if (c.req.path.startsWith('/api/')) {

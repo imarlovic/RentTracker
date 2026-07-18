@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Building2, CalendarDays, ChartColumn, FileText, LogOut, Plug, Receipt, Rows3 } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { Button } from '@/components/ui/button'
+import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { cn } from '@/lib/utils'
 
 const links = [
@@ -16,6 +17,7 @@ const links = [
 
 export function AppShell() {
   const { user, signOut } = useAuth()
+  usePushSubscription()
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-6xl flex-col gap-6 px-4 py-6 md:px-6">
@@ -43,7 +45,8 @@ export function AppShell() {
             className={({ isActive }) =>
               cn(
                 'inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
-                isActive && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
+                isActive &&
+                  'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
               )
             }
           >

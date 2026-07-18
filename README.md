@@ -97,12 +97,12 @@ Claim the preview account in the Cloudflare dashboard to keep it, then replace p
 |-------------|--------|
 | R1 Google auth | Done |
 | R2 Apartments + active unit + upcoming | Done |
-| R3 Calendar reservation CRUD | API partial / UI placeholder |
-| R4 Expenses + documents | Schema ready (R2 binding present) |
-| R5 Business charts | Placeholder |
-| R6 Airbnb/Booking sync | Schema ready (cron next) |
-| R7 Push notifications | Schema ready |
-| R8 PWA | Vite PWA plugin wired |
+| R3 Calendar reservation CRUD | Done |
+| R4 Expenses + documents | Done (D1 blob storage; R2 optional) |
+| R5 Business charts | Done |
+| R6 Airbnb/Booking sync | Done (iCal linked calendars) |
+| R7 Push notifications | Done (VAPID; optional) |
+| R8 PWA | Done |
 
 ## Legacy
 

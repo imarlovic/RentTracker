@@ -81,3 +81,66 @@ export function toReservationDto(row: ReservationRow) {
     people: row.people,
   }
 }
+
+export type ExpenseRow = {
+  id: string
+  apartment_id: string
+  name: string
+  description: string | null
+  date: string
+  amount: number
+  currency: string
+}
+
+export type DocumentRow = {
+  id: string
+  apartment_id: string
+  title: string
+  file_name: string
+  content_type: string
+  size_bytes: number
+  blob_key: string
+  uploaded_at: string
+}
+
+export type LinkedCalendarRow = {
+  id: string
+  apartment_id: string
+  name: string
+  url: string
+  last_synced_at: string | null
+}
+
+export function toExpenseDto(row: ExpenseRow) {
+  return {
+    id: row.id,
+    apartmentId: row.apartment_id,
+    name: row.name,
+    description: row.description,
+    date: row.date,
+    amount: row.amount,
+    currency: row.currency,
+  }
+}
+
+export function toDocumentDto(row: DocumentRow) {
+  return {
+    id: row.id,
+    apartmentId: row.apartment_id,
+    title: row.title,
+    fileName: row.file_name,
+    contentType: row.content_type,
+    sizeBytes: row.size_bytes,
+    uploadedAt: row.uploaded_at,
+  }
+}
+
+export function toLinkedCalendarDto(row: LinkedCalendarRow) {
+  return {
+    id: row.id,
+    apartmentId: row.apartment_id,
+    name: row.name,
+    url: row.url,
+    lastSyncedAt: row.last_synced_at,
+  }
+}

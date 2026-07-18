@@ -8,6 +8,9 @@ import {
   type ReservationRow,
 } from '../db'
 import type { Env, Variables } from '../env'
+import { getOwnedApartment } from '../ownership'
+import { notifyUserNewReservation } from '../push'
+import { resourceRoutes } from './resources'
 
 type CreateApartmentBody = { name?: string }
 type UpdateApartmentBody = { name?: string }
@@ -26,12 +29,7 @@ type ReservationBody = {
 
 export const apartmentRoutes = new Hono<{ Bindings: Env; Variables: Variables }>()
 
-async function getOwnedApartment(db: D1Database, apartmentId: string, userId: string) {
-  return db
-    .prepare('SELECT * FROM apartments WHERE id = ? AND owner_id = ?')
-    .bind(apartmentId, userId)
-    .first<ApartmentRow>()
-}
+apartmentRoutes.route('/', resourceRoutes)
 
 apartmentRoutes.get('/', async (c) => {
   const userId = c.get('userId')
@@ -132,7 +130,8 @@ apartmentRoutes.get('/:apartmentId/reservations', async (c) => {
 })
 
 apartmentRoutes.post('/:apartmentId/reservations', async (c) => {
-  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  const userId = c.get('userId')
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), userId)
   if (!apartment) {
     return c.json({ error: 'Not found' }, 404)
   }
@@ -197,6 +196,14 @@ apartmentRoutes.post('/:apartmentId/reservations', async (c) => {
       row.country,
     )
     .run()
+
+  c.executionCtx.waitUntil(
+    notifyUserNewReservation(c.env, userId, {
+      title: 'New reservation',
+      body: `${row.holding_name}: ${row.start_date} → ${row.end_date}`,
+      url: '/upcoming',
+    }),
+  )
 
   return c.json(toReservationDto(row), 201)
 })
@@ -277,7 +284,6 @@ apartmentRoutes.delete('/:apartmentId/reservations/:reservationId', async (c) =>
   )
     .bind(c.req.param('reservationId'), apartment.id)
     .first()
-
   if (!existing) {
     return c.json({ error: 'Not found' }, 404)
   }
