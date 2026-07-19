@@ -10,6 +10,7 @@ import {
   type LinkedCalendarRow,
 } from '../db'
 import type { Env, Variables } from '../env'
+import { detectCalendarProvider } from '../ical'
 import { getOwnedApartment } from '../ownership'
 import { syncLinkedCalendar } from '../sync'
 
@@ -317,21 +318,19 @@ resourceRoutes.post('/:apartmentId/linked-calendars', async (c) => {
     name: body.name.trim(),
     url: body.url.trim(),
     last_synced_at: null,
+    last_sync_error: null,
   }
 
   await c.env.DB.prepare(
-    `INSERT INTO linked_calendars (id, apartment_id, name, url, last_synced_at) VALUES (?, ?, ?, ?, NULL)`,
+    `INSERT INTO linked_calendars (id, apartment_id, name, url, last_synced_at, last_sync_error)
+     VALUES (?, ?, ?, ?, NULL, NULL)`,
   )
     .bind(row.id, row.apartment_id, row.name, row.url)
     .run()
 
   // Also upsert Booking/Airbnb integration config when URL looks like one
-  const provider = row.url.includes('airbnb')
-    ? 'Airbnb'
-    : row.url.includes('booking.com')
-      ? 'Booking'
-      : null
-  if (provider) {
+  const provider = detectCalendarProvider(row.url)
+  if (provider !== 'Other') {
     const existing = await c.env.DB.prepare(
       'SELECT id FROM integration_configurations WHERE apartment_id = ? AND provider = ?',
     )
@@ -339,15 +338,17 @@ resourceRoutes.post('/:apartmentId/linked-calendars', async (c) => {
       .first()
     if (existing) {
       await c.env.DB.prepare(
-        `UPDATE integration_configurations SET status = 'Active', ical_url = ?, last_synced_at = NULL WHERE id = ?`,
+        `UPDATE integration_configurations
+         SET status = 'Active', ical_url = ?, last_synced_at = NULL, last_sync_error = NULL
+         WHERE id = ?`,
       )
         .bind(row.url, existing.id)
         .run()
     } else {
       await c.env.DB.prepare(
         `INSERT INTO integration_configurations
-          (id, apartment_id, provider, status, external_property_id, ical_url, last_synced_at)
-         VALUES (?, ?, ?, 'Active', NULL, ?, NULL)`,
+          (id, apartment_id, provider, status, external_property_id, ical_url, last_synced_at, last_sync_error)
+         VALUES (?, ?, ?, 'Active', NULL, ?, NULL, NULL)`,
       )
         .bind(newId(), apartment.id, provider, row.url)
         .run()
@@ -399,7 +400,7 @@ resourceRoutes.get('/:apartmentId/integration-configurations', async (c) => {
   }
 
   const { results } = await c.env.DB.prepare(
-    'SELECT id, apartment_id, provider, status, ical_url, last_synced_at FROM integration_configurations WHERE apartment_id = ?',
+    'SELECT id, apartment_id, provider, status, ical_url, last_synced_at, last_sync_error FROM integration_configurations WHERE apartment_id = ?',
   )
     .bind(apartment.id)
     .all<{
@@ -409,6 +410,7 @@ resourceRoutes.get('/:apartmentId/integration-configurations', async (c) => {
       status: string
       ical_url: string | null
       last_synced_at: string | null
+      last_sync_error: string | null
     }>()
 
   return c.json(
@@ -419,6 +421,7 @@ resourceRoutes.get('/:apartmentId/integration-configurations', async (c) => {
       status: row.status,
       icalUrl: row.ical_url,
       lastSyncedAt: row.last_synced_at,
+      lastSyncError: row.last_sync_error,
     })),
   )
 })

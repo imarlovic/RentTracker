@@ -144,10 +144,18 @@ export async function deleteLinkedCalendar(apartmentId: string, calendarId: stri
 }
 
 export async function syncLinkedCalendar(apartmentId: string, calendarId: string) {
-  const { data } = await api.post<{ created: number; updated: number; canceled: number }>(
-    `/apartments/${apartmentId}/linked-calendars/${calendarId}/sync`,
-  )
-  return data
+  try {
+    const { data } = await api.post<{ created: number; updated: number; canceled: number }>(
+      `/apartments/${apartmentId}/linked-calendars/${calendarId}/sync`,
+    )
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = (error.response?.data as { error?: string } | undefined)?.error
+      throw new Error(message || error.message)
+    }
+    throw error
+  }
 }
 
 export async function listIntegrations(apartmentId: string): Promise<IntegrationConfiguration[]> {
