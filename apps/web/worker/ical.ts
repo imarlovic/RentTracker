@@ -1,10 +1,15 @@
 /** Minimal iCal VEVENT parser for OTA calendar feeds. */
 
+export type OtaSource = 'Airbnb' | 'Booking' | 'Other'
+
 export type IcalEvent = {
   uid: string
   summary: string
   startDate: string // YYYY-MM-DD
   endDate: string
+  source: OtaSource
+  holdingName: string
+  reference: string | null
 }
 
 function unfold(ics: string): string {
@@ -32,7 +37,42 @@ function getProp(block: string, name: string): string | null {
   return null
 }
 
-export function parseIcalEvents(ics: string): IcalEvent[] {
+export function detectCalendarProvider(url: string, uid?: string | null): OtaSource {
+  const uidLower = (uid ?? '').toLowerCase()
+  if (uidLower.endsWith('@airbnb.com') || url.toLowerCase().includes('airbnb')) {
+    return 'Airbnb'
+  }
+  if (uidLower.endsWith('@booking.com') || url.toLowerCase().includes('booking.com')) {
+    return 'Booking'
+  }
+  return 'Other'
+}
+
+function parseHoldingDetails(
+  source: OtaSource,
+  summary: string,
+): { holdingName: string; reference: string | null; skip: boolean } {
+  if (source === 'Airbnb') {
+    if (/not available/i.test(summary)) {
+      return { holdingName: summary, reference: null, skip: true }
+    }
+    const match = summary.match(/^(.+) \(([A-Za-z0-9]+)\)$/)
+    if (match) {
+      return { holdingName: match[1].trim(), reference: match[2], skip: false }
+    }
+  }
+
+  if (source === 'Booking') {
+    const match = summary.match(/CLOSED\s*-\s*(.+)$/i)
+    if (match) {
+      return { holdingName: match[1].trim(), reference: null, skip: false }
+    }
+  }
+
+  return { holdingName: summary || 'Reservation', reference: null, skip: false }
+}
+
+export function parseIcalEvents(ics: string, calendarUrl = ''): IcalEvent[] {
   const text = unfold(ics)
   const events: IcalEvent[] = []
   const parts = text.split('BEGIN:VEVENT')
@@ -53,7 +93,21 @@ export function parseIcalEvents(ics: string): IcalEvent[] {
       endDate = startDate
     }
 
-    events.push({ uid, summary, startDate, endDate })
+    const source = detectCalendarProvider(calendarUrl, uid)
+    const { holdingName, reference, skip } = parseHoldingDetails(source, summary)
+    if (skip) {
+      continue
+    }
+
+    events.push({
+      uid,
+      summary,
+      startDate,
+      endDate,
+      source,
+      holdingName,
+      reference,
+    })
   }
 
   return events

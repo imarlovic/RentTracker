@@ -109,6 +109,7 @@ export type LinkedCalendarRow = {
   name: string
   url: string
   last_synced_at: string | null
+  last_sync_error: string | null
 }
 
 export function toExpenseDto(row: ExpenseRow) {
@@ -142,5 +143,6 @@ export function toLinkedCalendarDto(row: LinkedCalendarRow) {
     name: row.name,
     url: row.url,
     lastSyncedAt: row.last_synced_at,
+    lastSyncError: row.last_sync_error,
   }
 }

@@ -60,6 +60,7 @@ export type LinkedCalendar = {
   name: string
   url: string
   lastSyncedAt?: string | null
+  lastSyncError?: string | null
 }
 
 export type IntegrationConfiguration = {
@@ -69,6 +70,7 @@ export type IntegrationConfiguration = {
   status: string
   icalUrl?: string | null
   lastSyncedAt?: string | null
+  lastSyncError?: string | null
 }
 
 export type ReservationInput = {

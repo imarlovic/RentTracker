@@ -6,6 +6,7 @@ import type { Env, Variables } from './env'
 import { apartmentRoutes } from './routes/apartments'
 import { authRoutes } from './routes/auth'
 import { notificationRoutes } from './routes/notifications'
+import { syncAllLinkedCalendars } from './sync'
 
 type AppEnv = { Bindings: Env; Variables: Variables }
 
@@ -58,4 +59,14 @@ app.notFound((c) => {
   return c.text('Not found', 404)
 })
 
-export default app
+const worker = {
+  fetch: app.fetch,
+  async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+    const result = await syncAllLinkedCalendars(env.DB)
+    console.log(
+      `Scheduled iCal sync: ${result.succeeded}/${result.calendars} ok, ${result.failed} failed`,
+    )
+  },
+}
+
+export default worker

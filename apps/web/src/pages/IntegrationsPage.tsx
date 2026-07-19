@@ -13,6 +13,17 @@ import {
   syncLinkedCalendar,
 } from '@/lib/api'
 
+function formatSyncTime(value?: string | null) {
+  if (!value) {
+    return 'never'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleString()
+}
+
 function IntegrationsInner() {
   const { activeApartmentId } = useApartmentContext()
   const apartmentId = activeApartmentId!
@@ -20,6 +31,7 @@ function IntegrationsInner() {
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const calendarsQuery = useQuery({
     queryKey: ['linked-calendars', apartmentId],
@@ -45,11 +57,21 @@ function IntegrationsInner() {
   const syncMutation = useMutation({
     mutationFn: (calendarId: string) => syncLinkedCalendar(apartmentId, calendarId),
     onSuccess: async (result) => {
+      setSyncError(null)
       setSyncMessage(
         `Synced: ${result.created} created, ${result.updated} updated, ${result.canceled} canceled`,
       )
-      await queryClient.invalidateQueries({ queryKey: ['reservations', apartmentId] })
-      await queryClient.invalidateQueries({ queryKey: ['linked-calendars', apartmentId] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reservations', apartmentId] }),
+        queryClient.invalidateQueries({ queryKey: ['linked-calendars', apartmentId] }),
+        queryClient.invalidateQueries({ queryKey: ['integrations', apartmentId] }),
+      ])
+    },
+    onError: (error) => {
+      setSyncMessage(null)
+      setSyncError(error instanceof Error ? error.message : 'Sync failed')
+      void queryClient.invalidateQueries({ queryKey: ['linked-calendars', apartmentId] })
+      void queryClient.invalidateQueries({ queryKey: ['integrations', apartmentId] })
     },
   })
 
@@ -70,7 +92,8 @@ function IntegrationsInner() {
       <div>
         <h2 className="text-xl font-semibold">Integrations</h2>
         <p className="text-sm text-muted-foreground">
-          Sync Airbnb / Booking reservations via iCal feeds (thesis R6).
+          Sync Airbnb / Booking reservations via iCal feeds. Calendars also sync automatically every
+          15 minutes.
         </p>
       </div>
 
@@ -85,7 +108,7 @@ function IntegrationsInner() {
           <form className="grid gap-3" onSubmit={onSubmit}>
             <Input
               required
-              placeholder="Name (e.g. Airbnb)"
+              placeholder="Name (e.g. Booking.com)"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -104,6 +127,7 @@ function IntegrationsInner() {
       </Card>
 
       {syncMessage && <p className="text-sm text-primary">{syncMessage}</p>}
+      {syncError && <p className="text-sm text-destructive">{syncError}</p>}
 
       <div className="space-y-2">
         {(calendarsQuery.data ?? []).map((calendar) => (
@@ -113,14 +137,20 @@ function IntegrationsInner() {
                 <p className="font-medium">{calendar.name}</p>
                 <p className="truncate text-sm text-muted-foreground">{calendar.url}</p>
                 <p className="text-xs text-muted-foreground">
-                  Last sync: {calendar.lastSyncedAt ?? 'never'}
+                  Last sync: {formatSyncTime(calendar.lastSyncedAt)}
                 </p>
+                {calendar.lastSyncError && (
+                  <p className="text-xs text-destructive">Last error: {calendar.lastSyncError}</p>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => syncMutation.mutate(calendar.id)}
+                  onClick={() => {
+                    setSyncError(null)
+                    syncMutation.mutate(calendar.id)
+                  }}
                   disabled={syncMutation.isPending}
                 >
                   Sync now
@@ -142,7 +172,10 @@ function IntegrationsInner() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Detected platforms</CardTitle>
-          <CardDescription>Filled automatically when an iCal URL matches Airbnb or Booking.</CardDescription>
+          <CardDescription>
+            Filled automatically when an iCal URL matches Airbnb or Booking. Status updates after
+            each sync.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {(integrationsQuery.data ?? []).length === 0 && (
@@ -150,8 +183,16 @@ function IntegrationsInner() {
           )}
           {(integrationsQuery.data ?? []).map((item) => (
             <div key={item.id} className="rounded-lg border px-3 py-2 text-sm">
-              <span className="font-medium">{item.provider}</span>
-              <span className="text-muted-foreground"> · {item.status}</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-medium">{item.provider}</span>
+                <span className="text-muted-foreground">· {item.status}</span>
+                <span className="text-xs text-muted-foreground">
+                  · Last sync: {formatSyncTime(item.lastSyncedAt)}
+                </span>
+              </div>
+              {item.lastSyncError && (
+                <p className="mt-1 text-xs text-destructive">{item.lastSyncError}</p>
+              )}
             </div>
           ))}
         </CardContent>
