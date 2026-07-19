@@ -1,5 +1,5 @@
 import { newId, nowIso } from './db'
-import { detectCalendarProvider, fetchIcal, parseIcalEvents } from './ical'
+import { detectCalendarProvider, fetchIcal, parseIcalEvents, type OtaSource } from './ical'
 
 export type SyncResult = {
   created: number
@@ -14,32 +14,60 @@ async function updateIntegrationStatus(
   ok: boolean,
   syncedAt: string,
   errorMessage: string | null,
+  sourceHint: OtaSource = 'Other',
 ): Promise<void> {
-  const provider = detectCalendarProvider(calendarUrl)
-  if (provider === 'Other') {
-    return
-  }
+  const fromUrl = detectCalendarProvider(calendarUrl)
+  const provider = fromUrl !== 'Other' ? fromUrl : sourceHint
 
   if (ok) {
+    if (provider !== 'Other') {
+      await db
+        .prepare(
+          `UPDATE integration_configurations
+           SET status = 'Active', last_synced_at = ?, last_sync_error = NULL, ical_url = ?
+           WHERE apartment_id = ? AND provider = ?`,
+        )
+        .bind(syncedAt, calendarUrl, apartmentId, provider)
+        .run()
+    }
     await db
       .prepare(
         `UPDATE integration_configurations
-         SET status = 'Active', last_synced_at = ?, last_sync_error = NULL, ical_url = ?
-         WHERE apartment_id = ? AND provider = ?`,
+         SET status = 'Active', last_synced_at = ?, last_sync_error = NULL
+         WHERE apartment_id = ? AND ical_url = ?`,
       )
-      .bind(syncedAt, calendarUrl, apartmentId, provider)
+      .bind(syncedAt, apartmentId, calendarUrl)
       .run()
     return
   }
 
+  if (provider !== 'Other') {
+    await db
+      .prepare(
+        `UPDATE integration_configurations
+         SET status = 'Error', last_sync_error = ?, ical_url = ?
+         WHERE apartment_id = ? AND provider = ?`,
+      )
+      .bind(errorMessage, calendarUrl, apartmentId, provider)
+      .run()
+  }
   await db
     .prepare(
       `UPDATE integration_configurations
-       SET status = 'Error', last_sync_error = ?, ical_url = ?
-       WHERE apartment_id = ? AND provider = ?`,
+       SET status = 'Error', last_sync_error = ?
+       WHERE apartment_id = ? AND ical_url = ?`,
     )
-    .bind(errorMessage, calendarUrl, apartmentId, provider)
+    .bind(errorMessage, apartmentId, calendarUrl)
     .run()
+}
+
+function dominantSource(events: { source: OtaSource }[]): OtaSource {
+  for (const source of ['Booking', 'Airbnb'] as const) {
+    if (events.some((event) => event.source === source)) {
+      return source
+    }
+  }
+  return 'Other'
 }
 
 export async function syncLinkedCalendar(
@@ -56,9 +84,15 @@ export async function syncLinkedCalendar(
     throw new Error('Linked calendar not found')
   }
 
+  let sourceHint: OtaSource = detectCalendarProvider(calendar.url)
+
   try {
     const ics = await fetchIcal(calendar.url)
     const events = parseIcalEvents(ics, calendar.url)
+    const fromEvents = dominantSource(events)
+    if (fromEvents !== 'Other') {
+      sourceHint = fromEvents
+    }
 
     let created = 0
     let updated = 0
@@ -141,7 +175,7 @@ export async function syncLinkedCalendar(
       .bind(syncedAt, calendar.id)
       .run()
 
-    await updateIntegrationStatus(db, apartmentId, calendar.url, true, syncedAt, null)
+    await updateIntegrationStatus(db, apartmentId, calendar.url, true, syncedAt, null, sourceHint)
 
     return { created, updated, canceled }
   } catch (error) {
@@ -150,7 +184,7 @@ export async function syncLinkedCalendar(
       .prepare(`UPDATE linked_calendars SET last_sync_error = ? WHERE id = ?`)
       .bind(message, calendar.id)
       .run()
-    await updateIntegrationStatus(db, apartmentId, calendar.url, false, nowIso(), message)
+    await updateIntegrationStatus(db, apartmentId, calendar.url, false, nowIso(), message, sourceHint)
     throw error instanceof Error ? error : new Error(message)
   }
 }
