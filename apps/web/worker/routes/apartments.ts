@@ -11,6 +11,7 @@ import type { Env, Variables } from '../env'
 import { getOwnedApartment } from '../ownership'
 import { notifyUserNewReservation } from '../push'
 import { resourceRoutes } from './resources'
+import { emailConnectionRoutes } from './emailConnections'
 
 type CreateApartmentBody = { name?: string }
 type UpdateApartmentBody = { name?: string }
@@ -30,6 +31,7 @@ type ReservationBody = {
 export const apartmentRoutes = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 apartmentRoutes.route('/', resourceRoutes)
+apartmentRoutes.route('/', emailConnectionRoutes)
 
 apartmentRoutes.get('/', async (c) => {
   const userId = c.get('userId')

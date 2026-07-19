@@ -27,11 +27,39 @@ export type Reservation = {
   holdingName: string
   startDate: string
   endDate: string
+  reference?: string | null
+  bookingDate?: string | null
   price?: number | null
   commission?: number | null
   currency: string
   country?: string | null
   people?: number | null
+  adults?: number | null
+  children?: number | null
+}
+
+export type EmailConnection = {
+  id: string
+  apartmentId: string
+  kind: string
+  provider: string
+  mailboxEmail: string
+  status: string
+  lastSyncedAt?: string | null
+  lastSyncError?: string | null
+  createdAt: string
+}
+
+export type EmailIngestEvent = {
+  id: string
+  messageId: string
+  fromAddress?: string | null
+  subject?: string | null
+  receivedAt?: string | null
+  parseStatus: string
+  parseError?: string | null
+  reservationId?: string | null
+  createdAt: string
 }
 
 export type Expense = {

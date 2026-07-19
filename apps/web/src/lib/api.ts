@@ -4,6 +4,8 @@ import type {
   Apartment,
   AuthResponse,
   DocumentItem,
+  EmailConnection,
+  EmailIngestEvent,
   Expense,
   IntegrationConfiguration,
   LinkedCalendar,
@@ -163,6 +165,75 @@ export async function listIntegrations(apartmentId: string): Promise<Integration
     `/apartments/${apartmentId}/integration-configurations`,
   )
   return data
+}
+
+export async function listEmailConnections(apartmentId: string): Promise<EmailConnection[]> {
+  const { data } = await api.get<EmailConnection[]>(`/apartments/${apartmentId}/email-connections`)
+  return data
+}
+
+export async function listEmailIngestEvents(apartmentId: string): Promise<EmailIngestEvent[]> {
+  const { data } = await api.get<EmailIngestEvent[]>(
+    `/apartments/${apartmentId}/email-connections/events`,
+  )
+  return data
+}
+
+export async function startBookingGmailConnect(
+  apartmentId: string,
+): Promise<{ authUrl: string; redirectUri: string }> {
+  try {
+    const { data } = await api.post<{ authUrl: string; redirectUri: string }>(
+      `/apartments/${apartmentId}/email-connections/gmail/start`,
+    )
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = (error.response?.data as { error?: string } | undefined)?.error
+      throw new Error(message || error.message)
+    }
+    throw error
+  }
+}
+
+export async function syncBookingGmail(apartmentId: string) {
+  try {
+    const { data } = await api.post<{ scanned: number; ingested: number; failed: number }>(
+      `/apartments/${apartmentId}/email-connections/gmail/sync`,
+    )
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = (error.response?.data as { error?: string } | undefined)?.error
+      throw new Error(message || error.message)
+    }
+    throw error
+  }
+}
+
+export async function disconnectEmailConnection(apartmentId: string, connectionId: string) {
+  await api.delete(`/apartments/${apartmentId}/email-connections/${connectionId}`)
+}
+
+export async function ingestBookingEmailSample(
+  apartmentId: string,
+  payload: { subject?: string; bodyText?: string; fromAddress?: string; messageId?: string },
+) {
+  try {
+    const { data } = await api.post<{
+      parseStatus: string
+      reservationId: string | null
+      applyAction?: string
+      error?: string
+    }>(`/apartments/${apartmentId}/email-connections/booking/ingest`, payload)
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = (error.response?.data as { error?: string } | undefined)?.error
+      throw new Error(message || error.message)
+    }
+    throw error
+  }
 }
 
 export async function getPushPublicKey(): Promise<string | null> {

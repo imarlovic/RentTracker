@@ -1,0 +1,368 @@
+import { Hono } from 'hono'
+import { newId, nowIso } from '../db'
+import {
+  buildGmailAuthUrl,
+  createGmailOAuthState,
+  exchangeGmailCode,
+  gmailRedirectUri,
+  integrationsRedirect,
+  requireGoogleOAuthConfig,
+  sealToken,
+  verifyGmailOAuthState,
+} from '../email/gmail'
+import { ingestBookingEmailMessage, syncGmailConnection, type EmailConnectionRow } from '../email/syncGmail'
+import { parseBookingEmail } from '../email/bookingParse'
+import type { Env, Variables } from '../env'
+import { getOwnedApartment } from '../ownership'
+
+export const emailConnectionRoutes = new Hono<{ Bindings: Env; Variables: Variables }>()
+
+function toConnectionDto(row: EmailConnectionRow) {
+  return {
+    id: row.id,
+    apartmentId: row.apartment_id,
+    kind: row.kind,
+    provider: row.provider,
+    mailboxEmail: row.mailbox_email,
+    status: row.status,
+    lastSyncedAt: row.last_synced_at,
+    lastSyncError: row.last_sync_error,
+    createdAt: row.created_at,
+  }
+}
+
+emailConnectionRoutes.get('/:apartmentId/email-connections', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM email_connections WHERE apartment_id = ? ORDER BY created_at DESC`,
+  )
+    .bind(apartment.id)
+    .all<EmailConnectionRow>()
+  return c.json((results ?? []).map(toConnectionDto))
+})
+
+emailConnectionRoutes.get('/:apartmentId/email-connections/events', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, message_id, from_address, subject, received_at, parse_status, parse_error,
+            reservation_id, created_at
+     FROM email_ingest_events
+     WHERE apartment_id = ?
+     ORDER BY created_at DESC
+     LIMIT 20`,
+  )
+    .bind(apartment.id)
+    .all<{
+      id: string
+      message_id: string
+      from_address: string | null
+      subject: string | null
+      received_at: string | null
+      parse_status: string
+      parse_error: string | null
+      reservation_id: string | null
+      created_at: string
+    }>()
+
+  return c.json(
+    (results ?? []).map((row) => ({
+      id: row.id,
+      messageId: row.message_id,
+      fromAddress: row.from_address,
+      subject: row.subject,
+      receivedAt: row.received_at,
+      parseStatus: row.parse_status,
+      parseError: row.parse_error,
+      reservationId: row.reservation_id,
+      createdAt: row.created_at,
+    })),
+  )
+})
+
+emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/start', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+
+  try {
+    const { clientId } = requireGoogleOAuthConfig(c.env)
+    const state = await createGmailOAuthState(c.env, {
+      userId: c.get('userId'),
+      apartmentId: apartment.id,
+      nonce: newId(),
+    })
+    const redirectUri = gmailRedirectUri(c.req.url)
+    const authUrl = buildGmailAuthUrl({ clientId, redirectUri, state })
+    return c.json({ authUrl, redirectUri })
+  } catch (error) {
+    return c.json(
+      { error: error instanceof Error ? error.message : 'Gmail OAuth is not configured' },
+      400,
+    )
+  }
+})
+
+emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/sync', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const connection = await c.env.DB.prepare(
+    `SELECT * FROM email_connections
+     WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'
+     LIMIT 1`,
+  )
+    .bind(apartment.id)
+    .first<EmailConnectionRow>()
+  if (!connection) {
+    return c.json({ error: 'No Booking Gmail connection. Connect a mailbox first.' }, 404)
+  }
+  try {
+    const result = await syncGmailConnection(c.env, connection.id)
+    return c.json(result)
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Sync failed' }, 400)
+  }
+})
+
+emailConnectionRoutes.delete('/:apartmentId/email-connections/:connectionId', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const existing = await c.env.DB.prepare(
+    `SELECT id FROM email_connections WHERE id = ? AND apartment_id = ?`,
+  )
+    .bind(c.req.param('connectionId'), apartment.id)
+    .first()
+  if (!existing) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  await c.env.DB.prepare(`DELETE FROM email_connections WHERE id = ?`)
+    .bind(c.req.param('connectionId'))
+    .run()
+  return c.body(null, 204)
+})
+
+/** Manual ingest for testing parsers without Gmail OAuth. */
+emailConnectionRoutes.post('/:apartmentId/email-connections/booking/ingest', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  let body: {
+    subject?: string
+    bodyText?: string
+    bodyHtml?: string
+    fromAddress?: string
+    messageId?: string
+  } = {}
+  try {
+    body = await c.req.json()
+  } catch {
+    body = {}
+  }
+  if (!body.subject && !body.bodyText && !body.bodyHtml) {
+    return c.json({ error: 'Provide subject and/or bodyText' }, 400)
+  }
+
+  const connection = await c.env.DB.prepare(
+    `SELECT id FROM email_connections WHERE apartment_id = ? AND kind = 'gmail' LIMIT 1`,
+  )
+    .bind(apartment.id)
+    .first<{ id: string }>()
+
+  const result = await ingestBookingEmailMessage(c.env, {
+    apartmentId: apartment.id,
+    connectionId: connection?.id ?? null,
+    userId: c.get('userId'),
+    messageId: body.messageId || `manual:${newId()}`,
+    fromAddress: body.fromAddress || 'manual@booking.com',
+    subject: body.subject,
+    receivedAt: nowIso(),
+    bodyText: body.bodyText,
+    bodyHtml: body.bodyHtml,
+    notifyOnCreate: true,
+  })
+  return c.json(result)
+})
+
+emailConnectionRoutes.post('/:apartmentId/email-connections/booking/parse-preview', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  let body: { subject?: string; bodyText?: string; bodyHtml?: string } = {}
+  try {
+    body = await c.req.json()
+  } catch {
+    body = {}
+  }
+  return c.json(parseBookingEmail(body))
+})
+
+/** Public OAuth callback (mounted under /api/auth). */
+export const gmailOAuthCallbackRoutes = new Hono<{ Bindings: Env; Variables: Variables }>()
+
+gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
+  const url = new URL(c.req.url)
+  const err = url.searchParams.get('error')
+  const origin = url.origin
+  if (err) {
+    return c.redirect(integrationsRedirect(origin, { gmail: 'error', reason: err }))
+  }
+
+  const code = url.searchParams.get('code')
+  const stateToken = url.searchParams.get('state')
+  if (!code || !stateToken) {
+    return c.redirect(integrationsRedirect(origin, { gmail: 'error', reason: 'missing_code' }))
+  }
+
+  try {
+    const state = await verifyGmailOAuthState(c.env, stateToken)
+    const apartment = await getOwnedApartment(c.env.DB, state.apartmentId, state.userId)
+    if (!apartment) {
+      return c.redirect(integrationsRedirect(origin, { gmail: 'error', reason: 'apartment' }))
+    }
+
+    const redirectUri = gmailRedirectUri(c.req.url)
+    const tokens = await exchangeGmailCode(c.env, code, redirectUri)
+    if (!tokens.refreshToken) {
+      // May happen if user previously granted access without prompt=consent.
+      const existing = await c.env.DB.prepare(
+        `SELECT gmail_refresh_token_enc FROM email_connections
+         WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'`,
+      )
+        .bind(apartment.id)
+        .first<{ gmail_refresh_token_enc: string | null }>()
+      if (!existing?.gmail_refresh_token_enc) {
+        return c.redirect(
+          integrationsRedirect(origin, { gmail: 'error', reason: 'missing_refresh_token' }),
+        )
+      }
+    }
+
+    const refreshEnc = tokens.refreshToken
+      ? await sealToken(c.env, tokens.refreshToken)
+      : (
+          await c.env.DB.prepare(
+            `SELECT gmail_refresh_token_enc FROM email_connections
+             WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'`,
+          )
+            .bind(apartment.id)
+            .first<{ gmail_refresh_token_enc: string }>()
+        )?.gmail_refresh_token_enc
+
+    if (!refreshEnc) {
+      return c.redirect(
+        integrationsRedirect(origin, { gmail: 'error', reason: 'missing_refresh_token' }),
+      )
+    }
+
+    const accessEnc = await sealToken(c.env, tokens.accessToken)
+    const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000).toISOString()
+    const existingConn = await c.env.DB.prepare(
+      `SELECT id FROM email_connections
+       WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'`,
+    )
+      .bind(apartment.id)
+      .first<{ id: string }>()
+
+    if (existingConn) {
+      await c.env.DB.prepare(
+        `UPDATE email_connections
+         SET user_id = ?, mailbox_email = ?, status = 'Active',
+             gmail_refresh_token_enc = ?, gmail_access_token_enc = ?,
+             gmail_access_token_expires_at = ?, last_sync_error = NULL
+         WHERE id = ?`,
+      )
+        .bind(
+          state.userId,
+          tokens.email,
+          refreshEnc,
+          accessEnc,
+          expiresAt,
+          existingConn.id,
+        )
+        .run()
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO email_connections (
+          id, apartment_id, user_id, kind, provider, mailbox_email, status,
+          gmail_refresh_token_enc, gmail_access_token_enc, gmail_access_token_expires_at,
+          gmail_history_id, last_synced_at, last_sync_error, created_at
+        ) VALUES (?, ?, ?, 'gmail', 'Booking', ?, 'Active', ?, ?, ?, NULL, NULL, NULL, ?)`,
+      )
+        .bind(
+          newId(),
+          apartment.id,
+          state.userId,
+          tokens.email,
+          refreshEnc,
+          accessEnc,
+          expiresAt,
+          nowIso(),
+        )
+        .run()
+    }
+
+    // Ensure Booking integration row exists for status display
+    const integration = await c.env.DB.prepare(
+      `SELECT id FROM integration_configurations WHERE apartment_id = ? AND provider = 'Booking'`,
+    )
+      .bind(apartment.id)
+      .first<{ id: string }>()
+    if (integration) {
+      await c.env.DB.prepare(
+        `UPDATE integration_configurations SET status = 'Active', last_sync_error = NULL WHERE id = ?`,
+      )
+        .bind(integration.id)
+        .run()
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO integration_configurations
+          (id, apartment_id, provider, status, external_property_id, ical_url, last_synced_at, last_sync_error)
+         VALUES (?, ?, 'Booking', 'Active', NULL, NULL, NULL, NULL)`,
+      )
+        .bind(newId(), apartment.id)
+        .run()
+    }
+
+    // Kick an initial sync (best effort)
+    const conn = await c.env.DB.prepare(
+      `SELECT id FROM email_connections WHERE apartment_id = ? AND kind = 'gmail' LIMIT 1`,
+    )
+      .bind(apartment.id)
+      .first<{ id: string }>()
+    if (conn) {
+      try {
+        c.executionCtx.waitUntil(
+          syncGmailConnection(c.env, conn.id).catch((error) =>
+            console.error('Initial Gmail sync failed', error),
+          ),
+        )
+      } catch {
+        void syncGmailConnection(c.env, conn.id).catch((error) =>
+          console.error('Initial Gmail sync failed', error),
+        )
+      }
+    }
+
+    return c.redirect(integrationsRedirect(origin, { gmail: 'connected' }))
+  } catch (error) {
+    console.error('Gmail OAuth callback failed', error)
+    return c.redirect(
+      integrationsRedirect(origin, {
+        gmail: 'error',
+        reason: error instanceof Error ? error.message.slice(0, 80) : 'callback_failed',
+      }),
+    )
+  }
+})

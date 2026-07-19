@@ -107,25 +107,63 @@ export async function syncLinkedCalendar(
       const existing = await db
         .prepare('SELECT * FROM reservations WHERE apartment_id = ? AND external_id = ?')
         .bind(apartmentId, externalId)
-        .first<{ id: string }>()
+        .first<{
+          id: string
+          holding_name: string
+          reference: string | null
+          price: number | null
+          commission: number | null
+        }>()
 
-      if (existing) {
+      // Merge onto an email-created Booking reservation with same dates / reference when present
+      const emailMatch =
+        existing ??
+        (await db
+          .prepare(
+            `SELECT id, holding_name, reference, price, commission, external_id FROM reservations
+             WHERE apartment_id = ?
+               AND source = 'Booking'
+               AND state = 'Active'
+               AND start_date = ? AND end_date = ?
+               AND (external_id LIKE 'email:booking:%' OR reference IS NOT NULL)
+             LIMIT 1`,
+          )
+          .bind(apartmentId, event.startDate, event.endDate)
+          .first<{
+            id: string
+            holding_name: string
+            reference: string | null
+            price: number | null
+            commission: number | null
+            external_id: string | null
+          }>())
+
+      if (emailMatch) {
+        const icalLooksGeneric =
+          /^CLOSED\s*-/i.test(event.holdingName) || event.holdingName === 'Reservation'
+        const holdingName =
+          icalLooksGeneric && emailMatch.holding_name ? emailMatch.holding_name : event.holdingName
+
         await db
           .prepare(
             `UPDATE reservations
              SET holding_name = ?, start_date = ?, end_date = ?, state = 'Active',
-                 source = ?, reference = COALESCE(?, reference)
+                 source = ?, reference = COALESCE(?, reference),
+                 external_id = ?
              WHERE id = ?`,
           )
           .bind(
-            event.holdingName,
+            holdingName,
             event.startDate,
             event.endDate,
-            event.source,
+            event.source === 'Other' ? 'Booking' : event.source,
             event.reference,
-            existing.id,
+            // Prefer stable iCal external id once linked, keep email id if somehow missing
+            existing ? externalId : externalId,
+            emailMatch.id,
           )
           .run()
+        activeExternalIds.add(externalId)
         updated++
       } else {
         await db

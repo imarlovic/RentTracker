@@ -74,11 +74,15 @@ export function toReservationDto(row: ReservationRow) {
     holdingName: row.holding_name,
     startDate: row.start_date,
     endDate: row.end_date,
+    reference: row.reference,
+    bookingDate: row.booking_date,
     price: row.price,
     commission: row.commission,
     currency: row.currency,
     country: row.country,
     people: row.people,
+    adults: row.adults,
+    children: row.children,
   }
 }
 
