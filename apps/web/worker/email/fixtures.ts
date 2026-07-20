@@ -149,7 +149,7 @@ Ova je poruka poslana na adresu partner@example.com
 `,
 }
 
-/** Anonymized Airbnb host reservation confirmation. */
+/** Anonymized Airbnb host reservation confirmation (EN). */
 export const fixtureAirbnbConfirmed = {
   subject: 'Reservation confirmed - HMABCDEF12',
   bodyText: `Reservation confirmed
@@ -164,6 +164,57 @@ Number of guests: 2
 You will earn: EUR 280.00
 
 Listing: Sample Apartment Zagreb
+`,
+}
+
+/**
+ * Anonymized from Croatian Airbnb host confirmation
+ * ("Rezervacija je potvrđena – … dolazi …").
+ */
+export const fixtureAirbnbConfirmedHr = {
+  subject: 'Rezervacija je potvrđena – Marko Horvat dolazi 20. lis',
+  referenceDate: '2026-07-13T13:28:41.000Z',
+  bodyText: `POTVRĐENA JE NOVA REZERVACIJA! MARKO DOLAZI 20. LIS.
+
+https://hr.airbnb.com/hosting/reservations/details/HMTESTCODE1?isPending=true
+
+Marko Horvat
+Identitet je verificiran · 2 recenzije
+Solun, Grčka
+
+APARTMENT SAMPLE NEAR AIRPORT
+
+Dolazak        Odlazak
+
+uto, 20. lis   sri, 21. lis
+
+16:00          12:00
+
+GOSTI
+
+2 odrasle osobe, 2 bebe
+
+KONFIRMACIJSKI KOD
+HMTESTCODE1
+
+GOST JE PLATIO
+
+60,00 € x 1 noćenje   60,00 €
+
+Naknada za usluge koju plaća gost   8,47 €
+
+UKUPNO (EUR)   70,08 €
+
+IZNOS ISPLATE ZA DOMAĆINA
+
+Naknada za sobu za 1 noćenje   60,00 €
+
+Naknada za usluge koju plaća domaćin (3.0 %)   −1,80 €
+
+VAŠA ZARADA   58,20 €
+
+OTKAZIVANJE
+Vaši uvjeti otkazivanja za goste su: Fleksibilni
 `,
 }
 

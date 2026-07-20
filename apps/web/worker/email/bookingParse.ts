@@ -109,8 +109,39 @@ function detectAction(subject: string, body: string): BookingEmailAction {
   return 'unknown'
 }
 
-export function parseDateLoose(raw: string): string | null {
+function hrMonthKey(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .slice(0, 3)
+}
+
+function isoWithInferredYear(
+  year: number,
+  month: string,
+  day: string,
+  referenceDate?: Date,
+): string {
+  let y = year
+  const padDay = day.padStart(2, '0')
+  if (referenceDate) {
+    const candidate = Date.parse(`${y}-${month}-${padDay}T12:00:00Z`)
+    // Stay dates omitted year when same calendar year; if result is far in the past, bump.
+    if (Number.isFinite(candidate) && candidate < referenceDate.getTime() - 60 * 86400000) {
+      y += 1
+    }
+  }
+  return `${y}-${month}-${padDay}`
+}
+
+export function parseDateLoose(
+  raw: string,
+  opts?: { referenceYear?: number; referenceDate?: Date },
+): string | null {
   const cleaned = raw.trim().replace(/\s+/g, ' ')
+  const referenceYear = opts?.referenceYear ?? new Date().getUTCFullYear()
+  const referenceDate = opts?.referenceDate
 
   const iso = cleaned.match(/(\d{4})-(\d{2})-(\d{2})/)
   if (iso) {
@@ -128,6 +159,17 @@ export function parseDateLoose(raw: string): string | null {
     }
   }
 
+  // English without year: "Fri 21 Nov" / "21 Nov"
+  const enNoYear = cleaned.match(
+    /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*)?\s*,?\s*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b/i,
+  )
+  if (enNoYear) {
+    const month = EN_MONTHS[enNoYear[2].slice(0, 3).toLowerCase()]
+    if (month) {
+      return isoWithInferredYear(referenceYear, month, enNoYear[1], referenceDate)
+    }
+  }
+
   // English MDY with weekday: "Fri, Aug 14, 2026" or "Aug 14, 2026"
   const enMdy = cleaned.match(
     /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\s*,\s*)?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),?\s+(\d{4})/i,
@@ -139,19 +181,37 @@ export function parseDateLoose(raw: string): string | null {
     }
   }
 
+  // English MDY without year: "Fri, Aug 14" / "Aug 14"
+  const enMdyNoYear = cleaned.match(
+    /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\s*,\s*)?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})\b/i,
+  )
+  if (enMdyNoYear) {
+    const month = EN_MONTHS[enMdyNoYear[1].slice(0, 3).toLowerCase()]
+    if (month) {
+      return isoWithInferredYear(referenceYear, month, enMdyNoYear[2], referenceDate)
+    }
+  }
+
   // Croatian: "ned, 19. lis. 2025." or "19. lis. 2025"
   const hr = cleaned.match(
     /(?:(?:pon|uto|sri|čet|cet|pet|sub|ned)[a-z]*)?\s*,?\s*(\d{1,2})\.\s*(sij|velj|ožu|ozu|tra|svi|lip|srp|kol|ruj|lis|stu|pro)[a-z]*\.?\s*(\d{4})\.?/i,
   )
   if (hr) {
-    const key = hr[2]
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{M}/gu, '')
-      .slice(0, 3)
-    const month = HR_MONTHS[key] || HR_MONTHS[hr[2].toLowerCase().slice(0, 3)]
+    const month = HR_MONTHS[hrMonthKey(hr[2])] || HR_MONTHS[hr[2].toLowerCase().slice(0, 3)]
     if (month) {
       return `${hr[3]}-${month}-${hr[1].padStart(2, '0')}`
+    }
+  }
+
+  // Croatian without year: "uto, 20. lis" / "20. lis."
+  const hrNoYear = cleaned.match(
+    /(?:(?:pon|uto|sri|čet|cet|pet|sub|ned)[a-z]*)?\s*,?\s*(\d{1,2})\.\s*(sij|velj|ožu|ozu|tra|svi|lip|srp|kol|ruj|lis|stu|pro)[a-z]*\.?\b/i,
+  )
+  if (hrNoYear) {
+    const month =
+      HR_MONTHS[hrMonthKey(hrNoYear[2])] || HR_MONTHS[hrNoYear[2].toLowerCase().slice(0, 3)]
+    if (month) {
+      return isoWithInferredYear(referenceYear, month, hrNoYear[1], referenceDate)
     }
   }
 

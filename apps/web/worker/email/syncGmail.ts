@@ -165,6 +165,7 @@ export async function ingestOtaEmailMessage(
             subject: input.subject,
             bodyText: input.bodyText,
             bodyHtml: input.bodyHtml,
+            referenceDate: input.receivedAt,
           })
         : parseBookingEmail({
             subject: input.subject,
