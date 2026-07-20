@@ -210,6 +210,8 @@ export async function syncMailboxGmail(
   try {
     const { data } = await api.post<{
       scanned: number
+      listed?: number
+      pages?: number
       ingested: number
       failed: number
       skipped?: number

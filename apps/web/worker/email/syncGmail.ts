@@ -5,11 +5,13 @@ import { applyParsedOtaEmail } from './apply'
 import { parseAirbnbEmail } from './airbnbParse'
 import { parseBookingEmail } from './bookingParse'
 import {
+  buildMailboxSearchQuery,
   getGmailMessage,
-  listMailboxMessages,
+  listMailboxMessagesPage,
   openToken,
   refreshGmailAccessToken,
   sealToken,
+  type GmailMessageListItem,
 } from './gmail'
 import { detectEmailProvider, type EmailProvider } from './providers'
 
@@ -346,7 +348,7 @@ function clampSyncOptions(options?: SyncGmailOptions): {
 } {
   return {
     newerThanDays: Math.min(365, Math.max(1, Math.floor(options?.newerThanDays ?? 45))),
-    maxMessages: Math.min(100, Math.max(1, Math.floor(options?.maxMessages ?? 50))),
+    maxMessages: Math.min(200, Math.max(1, Math.floor(options?.maxMessages ?? 50))),
     clearSeen: Boolean(options?.clearSeen),
   }
 }
@@ -362,12 +364,52 @@ export async function clearSeenIngestEvents(
   return result.meta.changes ?? 0
 }
 
+/** Page through Gmail until we have enough unseen candidates (or scan budget exhausted). */
+async function collectUnseenMailboxMessages(
+  env: Env,
+  accessToken: string,
+  apartmentId: string,
+  opts: { newerThanDays: number; maxMessages: number },
+): Promise<{ messages: GmailMessageListItem[]; listed: number; pages: number; skippedSeen: number }> {
+  const query = buildMailboxSearchQuery(opts.newerThanDays)
+  const maxScan = Math.min(500, Math.max(opts.maxMessages * 10, 200))
+  const messages: GmailMessageListItem[] = []
+  let pageToken: string | undefined
+  let listed = 0
+  let pages = 0
+  let skippedSeen = 0
+
+  while (messages.length < opts.maxMessages && listed < maxScan) {
+    const page = await listMailboxMessagesPage(accessToken, query, 100, pageToken)
+    pages += 1
+    listed += page.messages.length
+    for (const item of page.messages) {
+      if (await alreadyIngested(env.DB, apartmentId, item.id)) {
+        skippedSeen += 1
+        continue
+      }
+      messages.push(item)
+      if (messages.length >= opts.maxMessages) {
+        break
+      }
+    }
+    if (!page.nextPageToken || page.messages.length === 0) {
+      break
+    }
+    pageToken = page.nextPageToken
+  }
+
+  return { messages, listed, pages, skippedSeen }
+}
+
 export async function syncGmailConnection(
   env: Env,
   connectionId: string,
   options?: SyncGmailOptions,
 ): Promise<{
   scanned: number
+  listed: number
+  pages: number
   ingested: number
   failed: number
   skipped: number
@@ -392,20 +434,19 @@ export async function syncGmailConnection(
     }
 
     const { accessToken } = await resolveAccessToken(env, connection)
-    const messages = await listMailboxMessages(accessToken, {
-      newerThanDays: opts.newerThanDays,
-      maxResults: opts.maxMessages,
-    })
+    const collected = await collectUnseenMailboxMessages(
+      env,
+      accessToken,
+      connection.apartment_id,
+      opts,
+    )
+    const messages = collected.messages
     let ingested = 0
     let failed = 0
-    let skipped = 0
+    let skipped = collected.skippedSeen
     const byProvider: Partial<Record<EmailProvider, number>> = {}
 
     for (const item of messages) {
-      if (await alreadyIngested(env.DB, connection.apartment_id, item.id)) {
-        skipped++
-        continue
-      }
       try {
         const full = await getGmailMessage(accessToken, item.id)
         const result = await ingestDetectedEmailMessage(env, {
@@ -458,6 +499,8 @@ export async function syncGmailConnection(
 
     return {
       scanned: messages.length,
+      listed: collected.listed,
+      pages: collected.pages,
       ingested,
       failed,
       skipped,

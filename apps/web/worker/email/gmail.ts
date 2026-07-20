@@ -168,38 +168,118 @@ export type GmailMessageListItem = { id: string; threadId: string }
 export type ListMailboxOptions = {
   newerThanDays?: number
   maxResults?: number
+  /** Max messages to inspect across pages (includes already-seen). Default: max(maxResults*10, 200). */
+  maxScan?: number
+  pageToken?: string
 }
 
-/** List host-mail candidates for Booking + Airbnb from one mailbox. */
-export async function listMailboxMessages(
-  accessToken: string,
-  options: ListMailboxOptions | number = {},
-): Promise<GmailMessageListItem[]> {
-  // Backward compatible: listMailboxMessages(token, 45)
-  const opts: ListMailboxOptions = typeof options === 'number' ? { newerThanDays: options } : options
-  const newerThanDays = Math.min(365, Math.max(1, Math.floor(opts.newerThanDays ?? 45)))
-  const maxResults = Math.min(100, Math.max(1, Math.floor(opts.maxResults ?? 50)))
-
-  const query = [
-    'from:(booking.com OR mchat.booking.com OR airbnb.com OR airbnb.co)',
-    `(reservation OR rezervacij OR booking OR cancelled OR canceled OR storno OR otkaz`,
-    `OR confirmation OR potvrda OR prijava OR check-in OR checkout OR "check out"`,
-    `OR "Broj rezervacije" OR "Booking number" OR "Confirmation number" OR "confirmation code"`,
-    `OR "Ime gosta" OR "Guest name" OR "poruku od gosta" OR "request has been confirmed"`,
-    `OR altered OR modified OR guest OR payout OR earnings)`,
-    `newer_than:${newerThanDays}d`,
+/** Gmail search focused on reservation confirmations / changes, not marketing noise. */
+export function buildMailboxSearchQuery(newerThanDays: number): string {
+  const days = Math.min(365, Math.max(1, Math.floor(newerThanDays)))
+  // Keep this tight: a broad "guest/reservation" query fills the first page with
+  // reviews, security alerts, and promo mail — older confirmations never appear.
+  return [
+    'from:(airbnb.com OR airbnb.co OR booking.com OR mchat.booking.com OR properties.booking.com)',
+    '(',
+    'subject:("Rezervacija je potvrđena" OR "Reservation confirmed" OR "Booking confirmed"',
+    'OR "New booking" OR "Reservation confirmation" OR "Modified reservation"',
+    'OR "Reservation altered" OR "has been cancelled" OR "has been canceled"',
+    'OR "request has been confirmed" OR "potvrđena je nova" OR "Konfirmacijski kod"',
+    'OR "Confirmation code" OR "Broj rezervacije" OR "Booking number" OR "Confirmation number")',
+    'OR "konfirmacijski kod" OR "confirmation code" OR "broj rezervacije" OR "booking number"',
+    'OR "confirmation number" OR "reservation number" OR "potvrđena je nova rezervacija"',
+    'OR "you have a new reservation" OR "rezervacija je otkazana" OR "reservation canceled"',
+    'OR "reservation cancelled"',
+    ')',
+    `newer_than:${days}d`,
   ].join(' ')
+}
 
+type ListPageResult = {
+  messages: GmailMessageListItem[]
+  nextPageToken: string | null
+}
+
+export async function listMailboxMessagesPage(
+  accessToken: string,
+  query: string,
+  pageSize: number,
+  pageToken?: string,
+): Promise<ListPageResult> {
   const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages')
   url.searchParams.set('q', query)
-  url.searchParams.set('maxResults', String(maxResults))
+  url.searchParams.set('maxResults', String(Math.min(100, Math.max(1, pageSize))))
+  if (pageToken) {
+    url.searchParams.set('pageToken', pageToken)
+  }
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Gmail list failed (${res.status}): ${text.slice(0, 200)}`)
   }
-  const json = (await res.json()) as { messages?: GmailMessageListItem[] }
-  return json.messages ?? []
+  const json = (await res.json()) as {
+    messages?: GmailMessageListItem[]
+    nextPageToken?: string
+  }
+  return {
+    messages: json.messages ?? [],
+    nextPageToken: json.nextPageToken ?? null,
+  }
+}
+
+/**
+ * List host-mail candidates for Booking + Airbnb from one mailbox.
+ * Paginates until `maxResults` messages are collected or `maxScan` ids were listed.
+ */
+export async function listMailboxMessages(
+  accessToken: string,
+  options: ListMailboxOptions | number = {},
+): Promise<GmailMessageListItem[]> {
+  const result = await listMailboxMessagesPaginated(accessToken, options)
+  return result.messages
+}
+
+export async function listMailboxMessagesPaginated(
+  accessToken: string,
+  options: ListMailboxOptions | number = {},
+): Promise<{
+  messages: GmailMessageListItem[]
+  listed: number
+  pages: number
+  query: string
+}> {
+  const opts: ListMailboxOptions = typeof options === 'number' ? { newerThanDays: options } : options
+  const newerThanDays = Math.min(365, Math.max(1, Math.floor(opts.newerThanDays ?? 45)))
+  const maxResults = Math.min(200, Math.max(1, Math.floor(opts.maxResults ?? 50)))
+  const maxScan = Math.min(
+    500,
+    Math.max(maxResults, Math.floor(opts.maxScan ?? Math.max(maxResults * 10, 200))),
+  )
+  const query = buildMailboxSearchQuery(newerThanDays)
+
+  const messages: GmailMessageListItem[] = []
+  let pageToken: string | undefined = opts.pageToken
+  let listed = 0
+  let pages = 0
+
+  while (messages.length < maxResults && listed < maxScan) {
+    const pageSize = Math.min(100, maxScan - listed, maxResults - messages.length + 50)
+    const page = await listMailboxMessagesPage(accessToken, query, pageSize, pageToken)
+    pages += 1
+    listed += page.messages.length
+    for (const item of page.messages) {
+      messages.push(item)
+      if (messages.length >= maxResults) {
+        break
+      }
+    }
+    if (!page.nextPageToken || page.messages.length === 0) {
+      break
+    }
+    pageToken = page.nextPageToken
+  }
+
+  return { messages, listed, pages, query }
 }
 
 /** @deprecated Use listMailboxMessages */

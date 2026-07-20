@@ -89,8 +89,10 @@ function MailboxCard({
             .join(', ')
         : null
       onMessage(
-        `Mailbox sync (${result.newerThanDays ?? newerThanDays}d / max ${result.maxMessages ?? maxMessages}): ` +
-          `scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
+        `Mailbox sync (${result.newerThanDays ?? newerThanDays}d / max ${result.maxMessages ?? maxMessages}` +
+          (result.listed != null ? `, listed ${result.listed}` : '') +
+          (result.pages != null ? `/${result.pages}p` : '') +
+          `): scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
           (result.clearedSeen ? `, cleared ${result.clearedSeen} seen` : '') +
           (byProvider ? ` (${byProvider})` : ''),
       )
@@ -181,7 +183,7 @@ function MailboxCard({
                 <Input
                   type="number"
                   min={1}
-                  max={100}
+                  max={200}
                   value={maxMessages}
                   onChange={(e) => setMaxMessages(Number(e.target.value) || 1)}
                 />
