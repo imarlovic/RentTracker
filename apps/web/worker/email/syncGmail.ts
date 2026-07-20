@@ -6,12 +6,12 @@ import { parseAirbnbEmail } from './airbnbParse'
 import { parseBookingEmail } from './bookingParse'
 import {
   getGmailMessage,
-  listOtaMessages,
+  listMailboxMessages,
   openToken,
   refreshGmailAccessToken,
   sealToken,
 } from './gmail'
-import { isEmailProvider, type EmailProvider } from './providers'
+import { detectEmailProvider, type EmailProvider } from './providers'
 
 export type EmailConnectionRow = {
   id: string
@@ -155,6 +155,7 @@ export async function ingestOtaEmailMessage(
   parseStatus: 'parsed' | 'ignored' | 'failed'
   reservationId: string | null
   applyAction?: string
+  provider?: EmailProvider
   error?: string
 }> {
   try {
@@ -204,6 +205,7 @@ export async function ingestOtaEmailMessage(
       parseStatus,
       reservationId: apply.reservationId,
       applyAction: apply.action,
+      provider: input.provider,
       error: apply.reason,
     }
   } catch (error) {
@@ -219,8 +221,58 @@ export async function ingestOtaEmailMessage(
       parseError: message,
       rawExcerpt: (input.bodyText || input.subject || '').slice(0, EXCERPT_MAX),
     })
-    return { parseStatus: 'failed', reservationId: null, error: message }
+    return { parseStatus: 'failed', reservationId: null, provider: input.provider, error: message }
   }
+}
+
+/** Detect provider then ingest. Used by unified mailbox sync and sample paste. */
+export async function ingestDetectedEmailMessage(
+  env: Env,
+  input: {
+    apartmentId: string
+    connectionId: string | null
+    userId?: string | null
+    messageId: string
+    fromAddress?: string | null
+    subject?: string | null
+    receivedAt?: string | null
+    bodyText?: string | null
+    bodyHtml?: string | null
+    notifyOnCreate?: boolean
+    providerHint?: EmailProvider | null
+  },
+): Promise<{
+  parseStatus: 'parsed' | 'ignored' | 'failed'
+  reservationId: string | null
+  applyAction?: string
+  provider?: EmailProvider | null
+  error?: string
+}> {
+  const provider =
+    input.providerHint ??
+    detectEmailProvider(input.fromAddress, input.subject, input.bodyText, input.bodyHtml)
+
+  if (!provider) {
+    await recordIngestEvent(env.DB, {
+      apartmentId: input.apartmentId,
+      connectionId: input.connectionId,
+      messageId: input.messageId,
+      fromAddress: input.fromAddress,
+      subject: input.subject,
+      receivedAt: input.receivedAt,
+      parseStatus: 'ignored',
+      parseError: 'Could not detect Booking or Airbnb from this message',
+      rawExcerpt: (input.bodyText || input.bodyHtml || input.subject || '').slice(0, EXCERPT_MAX),
+    })
+    return {
+      parseStatus: 'ignored',
+      reservationId: null,
+      provider: null,
+      error: 'Could not detect Booking or Airbnb from this message',
+    }
+  }
+
+  return ingestOtaEmailMessage(env, { ...input, provider })
 }
 
 /** @deprecated Use ingestOtaEmailMessage with provider Booking */
@@ -242,10 +294,53 @@ export async function ingestBookingEmailMessage(
   return ingestOtaEmailMessage(env, { ...input, provider: 'Booking' })
 }
 
+async function upsertMailboxIntegrations(
+  db: D1Database,
+  apartmentId: string,
+  syncedAt: string,
+  error: string | null,
+  providers: EmailProvider[] = ['Booking', 'Airbnb'],
+): Promise<void> {
+  for (const provider of providers) {
+    const existing = await db
+      .prepare(
+        `SELECT id FROM integration_configurations WHERE apartment_id = ? AND provider = ?`,
+      )
+      .bind(apartmentId, provider)
+      .first<{ id: string }>()
+
+    if (existing) {
+      await db
+        .prepare(
+          `UPDATE integration_configurations
+           SET status = ?, last_synced_at = ?, last_sync_error = ?
+           WHERE id = ?`,
+        )
+        .bind(error ? 'Error' : 'Active', syncedAt, error, existing.id)
+        .run()
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO integration_configurations
+            (id, apartment_id, provider, status, external_property_id, ical_url, last_synced_at, last_sync_error)
+           VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)`,
+        )
+        .bind(newId(), apartmentId, provider, error ? 'Error' : 'Active', syncedAt, error)
+        .run()
+    }
+  }
+}
+
 export async function syncGmailConnection(
   env: Env,
   connectionId: string,
-): Promise<{ scanned: number; ingested: number; failed: number }> {
+): Promise<{
+  scanned: number
+  ingested: number
+  failed: number
+  skipped: number
+  byProvider: Partial<Record<EmailProvider, number>>
+}> {
   const connection = await env.DB.prepare('SELECT * FROM email_connections WHERE id = ?')
     .bind(connectionId)
     .first<EmailConnectionRow>()
@@ -255,23 +350,22 @@ export async function syncGmailConnection(
 
   try {
     const { accessToken } = await resolveAccessToken(env, connection)
-    const provider: EmailProvider = isEmailProvider(connection.provider)
-      ? connection.provider
-      : 'Booking'
-    const messages = await listOtaMessages(accessToken, provider)
+    const messages = await listMailboxMessages(accessToken)
     let ingested = 0
     let failed = 0
+    let skipped = 0
+    const byProvider: Partial<Record<EmailProvider, number>> = {}
 
     for (const item of messages) {
       if (await alreadyIngested(env.DB, connection.apartment_id, item.id)) {
+        skipped++
         continue
       }
       try {
         const full = await getGmailMessage(accessToken, item.id)
-        const result = await ingestOtaEmailMessage(env, {
+        const result = await ingestDetectedEmailMessage(env, {
           apartmentId: connection.apartment_id,
           connectionId: connection.id,
-          provider,
           userId: connection.user_id,
           messageId: full.id,
           fromAddress: full.from,
@@ -283,8 +377,13 @@ export async function syncGmailConnection(
         })
         if (result.parseStatus === 'failed') {
           failed++
+        } else if (result.parseStatus === 'ignored' && !result.reservationId) {
+          skipped++
         } else {
           ingested++
+          if (result.provider) {
+            byProvider[result.provider] = (byProvider[result.provider] ?? 0) + 1
+          }
         }
       } catch (error) {
         failed++
@@ -301,24 +400,20 @@ export async function syncGmailConnection(
     const syncedAt = nowIso()
     await env.DB.prepare(
       `UPDATE email_connections
-       SET last_synced_at = ?, last_sync_error = NULL, status = 'Active'
+       SET last_synced_at = ?, last_sync_error = NULL, status = 'Active', provider = 'Mailbox'
        WHERE id = ?`,
     )
       .bind(syncedAt, connection.id)
       .run()
 
-    await env.DB.prepare(
-      `UPDATE integration_configurations
-       SET status = 'Active', last_synced_at = ?, last_sync_error = NULL
-       WHERE apartment_id = ? AND provider = ?`,
-    )
-      .bind(syncedAt, connection.apartment_id, provider)
-      .run()
+    await upsertMailboxIntegrations(env.DB, connection.apartment_id, syncedAt, null, [
+      'Booking',
+      'Airbnb',
+    ])
 
-    return { scanned: messages.length, ingested, failed }
+    return { scanned: messages.length, ingested, failed, skipped, byProvider }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gmail sync failed'
-    const provider = isEmailProvider(connection.provider) ? connection.provider : 'Booking'
     await env.DB.prepare(
       `UPDATE email_connections
        SET status = 'Error', last_sync_error = ?
@@ -326,13 +421,7 @@ export async function syncGmailConnection(
     )
       .bind(message, connection.id)
       .run()
-    await env.DB.prepare(
-      `UPDATE integration_configurations
-       SET status = 'Error', last_sync_error = ?
-       WHERE apartment_id = ? AND provider = ?`,
-    )
-      .bind(message, connection.apartment_id, provider)
-      .run()
+    await upsertMailboxIntegrations(env.DB, connection.apartment_id, nowIso(), message)
     throw error instanceof Error ? error : new Error(message)
   }
 }

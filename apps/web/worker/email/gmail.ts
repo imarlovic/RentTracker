@@ -8,7 +8,6 @@ export type GmailOAuthState = {
   userId: string
   apartmentId: string
   nonce: string
-  provider: 'Booking' | 'Airbnb'
 }
 
 function secretKey(env: Env) {
@@ -49,12 +48,10 @@ export async function verifyGmailOAuthState(env: Env, token: string): Promise<Gm
   ) {
     throw new Error('Invalid OAuth state')
   }
-  const provider = payload.provider === 'Airbnb' ? 'Airbnb' : 'Booking'
   return {
     userId: payload.userId,
     apartmentId: payload.apartmentId,
     nonce: payload.nonce,
-    provider,
   }
 }
 
@@ -168,27 +165,20 @@ export async function openToken(env: Env, value: string): Promise<string> {
 
 export type GmailMessageListItem = { id: string; threadId: string }
 
-export async function listOtaMessages(
+/** List host-mail candidates for Booking + Airbnb from one mailbox. */
+export async function listMailboxMessages(
   accessToken: string,
-  provider: 'Booking' | 'Airbnb',
   newerThanDays = 45,
 ): Promise<GmailMessageListItem[]> {
-  const query =
-    provider === 'Airbnb'
-      ? [
-          'from:(airbnb.com OR airbnb.co)',
-          `(reservation OR confirmation OR cancelled OR canceled OR altered OR modified`,
-          `OR "confirmation code" OR check-in OR checkout OR "check out" OR guest OR payout OR earnings)`,
-          `newer_than:${newerThanDays}d`,
-        ].join(' ')
-      : [
-          'from:(booking.com OR mchat.booking.com)',
-          `(reservation OR rezervacij OR booking OR cancelled OR canceled OR storno OR otkaz`,
-          `OR confirmation OR potvrda OR prijava OR check-in OR "Broj rezervacije"`,
-          `OR "Booking number" OR "Confirmation number" OR "Ime gosta" OR "Guest name"`,
-          `OR "poruku od gosta" OR "request has been confirmed")`,
-          `newer_than:${newerThanDays}d`,
-        ].join(' ')
+  const query = [
+    'from:(booking.com OR mchat.booking.com OR airbnb.com OR airbnb.co)',
+    `(reservation OR rezervacij OR booking OR cancelled OR canceled OR storno OR otkaz`,
+    `OR confirmation OR potvrda OR prijava OR check-in OR checkout OR "check out"`,
+    `OR "Broj rezervacije" OR "Booking number" OR "Confirmation number" OR "confirmation code"`,
+    `OR "Ime gosta" OR "Guest name" OR "poruku od gosta" OR "request has been confirmed"`,
+    `OR altered OR modified OR guest OR payout OR earnings)`,
+    `newer_than:${newerThanDays}d`,
+  ].join(' ')
 
   const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages')
   url.searchParams.set('q', query)
@@ -202,12 +192,21 @@ export async function listOtaMessages(
   return json.messages ?? []
 }
 
-/** @deprecated Use listOtaMessages(..., 'Booking') */
+/** @deprecated Use listMailboxMessages */
+export async function listOtaMessages(
+  accessToken: string,
+  _provider: 'Booking' | 'Airbnb',
+  newerThanDays = 45,
+): Promise<GmailMessageListItem[]> {
+  return listMailboxMessages(accessToken, newerThanDays)
+}
+
+/** @deprecated Use listMailboxMessages */
 export async function listBookingMessages(
   accessToken: string,
   newerThanDays = 45,
 ): Promise<GmailMessageListItem[]> {
-  return listOtaMessages(accessToken, 'Booking', newerThanDays)
+  return listMailboxMessages(accessToken, newerThanDays)
 }
 
 type GmailHeader = { name: string; value: string }

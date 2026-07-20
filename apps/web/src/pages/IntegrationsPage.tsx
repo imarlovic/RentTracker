@@ -10,17 +10,15 @@ import {
   createLinkedCalendar,
   deleteLinkedCalendar,
   disconnectEmailConnection,
-  ingestBookingEmailSample,
+  ingestMailboxEmailSample,
   listEmailConnections,
   listEmailIngestEvents,
   listIntegrations,
   listLinkedCalendars,
-  startBookingGmailConnect,
-  syncBookingGmail,
+  startMailboxGmailConnect,
   syncLinkedCalendar,
+  syncMailboxGmail,
 } from '@/lib/api'
-
-type OtaProvider = 'Booking' | 'Airbnb'
 
 function formatSyncTime(value?: string | null) {
   if (!value) {
@@ -33,31 +31,17 @@ function formatSyncTime(value?: string | null) {
   return date.toLocaleString()
 }
 
-const SAMPLES: Record<OtaProvider, { subject: string; body: string }> = {
-  Booking: {
-    subject: 'New booking - Reservation confirmation 4839201745',
-    body: `Guest name: Ana Petrovic
+const SAMPLE_SUBJECT = 'New booking - Reservation confirmation 4839201745'
+const SAMPLE_BODY = `Guest name: Ana Petrovic
 Check-in: 2026-08-12
 Check-out: 2026-08-15
 Reservation number: 4839201745
 Total price: EUR 420.00
 Commission: EUR 63.00
 Adults: 2
-Country: Croatia`,
-  },
-  Airbnb: {
-    subject: 'Reservation confirmed - HMABCDEF12',
-    body: `Confirmation code: HMABCDEF12
-Guest: Petra Novak
-Check-in: Fri, Aug 14, 2026
-Check-out: Mon, Aug 17, 2026
-Number of guests: 2
-You will earn: EUR 280.00`,
-  },
-}
+Country: Croatia`
 
-function ProviderMailboxCard({
-  provider,
+function MailboxCard({
   connection,
   apartmentId,
   onBanner,
@@ -66,7 +50,6 @@ function ProviderMailboxCard({
   invalidate,
   events,
 }: {
-  provider: OtaProvider
   connection?: EmailConnection
   apartmentId: string
   onBanner: (value: string | null) => void
@@ -75,55 +58,55 @@ function ProviderMailboxCard({
   invalidate: () => Promise<void>
   events: EmailIngestEvent[]
 }) {
-  const sample = SAMPLES[provider]
-  const [sampleSubject, setSampleSubject] = useState(sample.subject)
-  const [sampleBody, setSampleBody] = useState(sample.body)
+  const [sampleSubject, setSampleSubject] = useState(SAMPLE_SUBJECT)
+  const [sampleBody, setSampleBody] = useState(SAMPLE_BODY)
 
   const connectMutation = useMutation({
-    mutationFn: () => startBookingGmailConnect(apartmentId, provider),
+    mutationFn: () => startMailboxGmailConnect(apartmentId),
     onSuccess: ({ authUrl }) => {
       window.location.assign(authUrl)
     },
     onError: (error) => {
-      onBanner(error instanceof Error ? error.message : `Could not start ${provider} Gmail connect`)
+      onBanner(error instanceof Error ? error.message : 'Could not start Gmail connect')
     },
   })
 
   const syncMutation = useMutation({
-    mutationFn: () => syncBookingGmail(apartmentId, provider),
+    mutationFn: () => syncMailboxGmail(apartmentId),
     onSuccess: async (result) => {
+      const byProvider = result.byProvider
+        ? Object.entries(result.byProvider)
+            .map(([provider, count]) => `${provider}: ${count}`)
+            .join(', ')
+        : null
       onMessage(
-        `${provider} Gmail sync: scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}`,
+        `Mailbox sync: scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
+          (byProvider ? ` (${byProvider})` : ''),
       )
       await invalidate()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : `${provider} Gmail sync failed`)
+      onError(error instanceof Error ? error.message : 'Mailbox sync failed')
     },
   })
 
   const disconnectMutation = useMutation({
     mutationFn: (connectionId: string) => disconnectEmailConnection(apartmentId, connectionId),
     onSuccess: async () => {
-      onBanner(`${provider} Gmail disconnected.`)
+      onBanner('Mailbox disconnected.')
       await invalidate()
     },
   })
 
   const sampleIngestMutation = useMutation({
     mutationFn: () =>
-      ingestBookingEmailSample(
-        apartmentId,
-        {
-          subject: sampleSubject,
-          bodyText: sampleBody,
-          fromAddress: provider === 'Airbnb' ? 'noreply@airbnb.com' : 'noreply@booking.com',
-        },
-        provider,
-      ),
+      ingestMailboxEmailSample(apartmentId, {
+        subject: sampleSubject,
+        bodyText: sampleBody,
+      }),
     onSuccess: async (result) => {
       onMessage(
-        `${provider} sample: ${result.applyAction || result.parseStatus}` +
+        `Sample${result.provider ? ` (${result.provider})` : ''}: ${result.applyAction || result.parseStatus}` +
           (result.reservationId ? ` → ${result.reservationId}` : '') +
           (result.error ? ` (${result.error})` : ''),
       )
@@ -137,10 +120,10 @@ function ProviderMailboxCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">{provider} Gmail inbox</CardTitle>
+        <CardTitle className="text-lg">Reservation mailbox</CardTitle>
         <CardDescription>
-          Connect the Google account that receives {provider} host emails. This can differ from your
-          RentTracker login account.
+          Connect the Google account that receives Booking.com and Airbnb host emails. One mailbox
+          covers both — RentTracker detects the provider per message.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -163,7 +146,7 @@ function ProviderMailboxCard({
                 onClick={() => syncMutation.mutate()}
                 disabled={syncMutation.isPending}
               >
-                Sync Gmail now
+                Sync mailbox now
               </Button>
               <Button
                 type="button"
@@ -191,12 +174,12 @@ function ProviderMailboxCard({
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
           >
-            {connectMutation.isPending ? 'Starting…' : `Connect ${provider} Gmail…`}
+            {connectMutation.isPending ? 'Starting…' : 'Connect Gmail mailbox…'}
           </Button>
         )}
 
         <div className="space-y-2 border-t pt-3">
-          <p className="text-sm font-medium">Paste a sample {provider} email</p>
+          <p className="text-sm font-medium">Paste a sample Booking or Airbnb email</p>
           <Input
             value={sampleSubject}
             onChange={(e) => setSampleSubject(e.target.value)}
@@ -221,7 +204,7 @@ function ProviderMailboxCard({
         {events.length > 0 && (
           <div className="space-y-2 border-t pt-3">
             <p className="text-sm font-medium">Recent email ingest</p>
-            {events.slice(0, 5).map((event) => (
+            {events.slice(0, 8).map((event) => (
               <div key={event.id} className="rounded-md border px-3 py-2 text-xs">
                 <p className="font-medium">{event.subject || '(no subject)'}</p>
                 <p className="text-muted-foreground">
@@ -256,9 +239,8 @@ function IntegrationsInner() {
     if (!gmail) {
       return
     }
-    const provider = params.get('provider') || 'Booking'
     if (gmail === 'connected') {
-      setGmailBanner(`${provider} Gmail connected. Initial sync may take a moment.`)
+      setGmailBanner('Mailbox connected. Initial sync may take a moment.')
     } else {
       setGmailBanner(`Gmail connect failed: ${params.get('reason') || 'unknown error'}`)
     }
@@ -286,12 +268,7 @@ function IntegrationsInner() {
     queryFn: () => listEmailIngestEvents(apartmentId),
   })
 
-  const bookingGmail = (emailConnectionsQuery.data ?? []).find(
-    (item) => item.kind === 'gmail' && item.provider === 'Booking',
-  )
-  const airbnbGmail = (emailConnectionsQuery.data ?? []).find(
-    (item) => item.kind === 'gmail' && item.provider === 'Airbnb',
-  )
+  const mailbox = (emailConnectionsQuery.data ?? []).find((item) => item.kind === 'gmail')
 
   const invalidateEmail = async () => {
     await Promise.all([
@@ -352,8 +329,8 @@ function IntegrationsInner() {
       <div>
         <h2 className="text-xl font-semibold">Integrations</h2>
         <p className="text-sm text-muted-foreground">
-          Sync Airbnb / Booking via iCal, and enrich stays from separate Gmail inboxes (can differ
-          from your login Google account).
+          Sync Airbnb / Booking via iCal, and enrich stays from one Gmail mailbox that receives host
+          mail from both platforms.
         </p>
       </div>
 
@@ -361,20 +338,8 @@ function IntegrationsInner() {
       {syncMessage && <p className="text-sm text-primary">{syncMessage}</p>}
       {syncError && <p className="text-sm text-destructive">{syncError}</p>}
 
-      <ProviderMailboxCard
-        provider="Booking"
-        connection={bookingGmail}
-        apartmentId={apartmentId}
-        onBanner={setGmailBanner}
-        onMessage={setSyncMessage}
-        onError={setSyncError}
-        invalidate={invalidateEmail}
-        events={ingestEventsQuery.data ?? []}
-      />
-
-      <ProviderMailboxCard
-        provider="Airbnb"
-        connection={airbnbGmail}
+      <MailboxCard
+        connection={mailbox}
         apartmentId={apartmentId}
         onBanner={setGmailBanner}
         onMessage={setSyncMessage}

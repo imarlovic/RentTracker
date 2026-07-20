@@ -179,15 +179,12 @@ export async function listEmailIngestEvents(apartmentId: string): Promise<EmailI
   return data
 }
 
-export async function startBookingGmailConnect(
+export async function startMailboxGmailConnect(
   apartmentId: string,
-  provider: 'Booking' | 'Airbnb' = 'Booking',
-): Promise<{ authUrl: string; redirectUri: string; provider?: string }> {
+): Promise<{ authUrl: string; redirectUri: string }> {
   try {
-    const { data } = await api.post<{ authUrl: string; redirectUri: string; provider?: string }>(
+    const { data } = await api.post<{ authUrl: string; redirectUri: string }>(
       `/apartments/${apartmentId}/email-connections/gmail/start`,
-      null,
-      { params: { provider } },
     )
     return data
   } catch (error) {
@@ -199,16 +196,18 @@ export async function startBookingGmailConnect(
   }
 }
 
-export async function syncBookingGmail(
-  apartmentId: string,
-  provider: 'Booking' | 'Airbnb' = 'Booking',
-) {
+/** @deprecated Use startMailboxGmailConnect */
+export const startBookingGmailConnect = startMailboxGmailConnect
+
+export async function syncMailboxGmail(apartmentId: string) {
   try {
-    const { data } = await api.post<{ scanned: number; ingested: number; failed: number }>(
-      `/apartments/${apartmentId}/email-connections/gmail/sync`,
-      null,
-      { params: { provider } },
-    )
+    const { data } = await api.post<{
+      scanned: number
+      ingested: number
+      failed: number
+      skipped?: number
+      byProvider?: Partial<Record<'Booking' | 'Airbnb', number>>
+    }>(`/apartments/${apartmentId}/email-connections/gmail/sync`)
     return data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -218,24 +217,32 @@ export async function syncBookingGmail(
     throw error
   }
 }
+
+/** @deprecated Use syncMailboxGmail */
+export const syncBookingGmail = syncMailboxGmail
 
 export async function disconnectEmailConnection(apartmentId: string, connectionId: string) {
   await api.delete(`/apartments/${apartmentId}/email-connections/${connectionId}`)
 }
 
-export async function ingestBookingEmailSample(
+export async function ingestMailboxEmailSample(
   apartmentId: string,
-  payload: { subject?: string; bodyText?: string; fromAddress?: string; messageId?: string },
-  provider: 'Booking' | 'Airbnb' = 'Booking',
+  payload: {
+    subject?: string
+    bodyText?: string
+    fromAddress?: string
+    messageId?: string
+    provider?: 'Booking' | 'Airbnb'
+  },
 ) {
   try {
-    const path = provider === 'Airbnb' ? 'airbnb' : 'booking'
     const { data } = await api.post<{
       parseStatus: string
       reservationId: string | null
       applyAction?: string
+      provider?: string | null
       error?: string
-    }>(`/apartments/${apartmentId}/email-connections/${path}/ingest`, payload)
+    }>(`/apartments/${apartmentId}/email-connections/ingest`, payload)
     return data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -244,6 +251,15 @@ export async function ingestBookingEmailSample(
     }
     throw error
   }
+}
+
+/** @deprecated Use ingestMailboxEmailSample */
+export async function ingestBookingEmailSample(
+  apartmentId: string,
+  payload: { subject?: string; bodyText?: string; fromAddress?: string; messageId?: string },
+  provider: 'Booking' | 'Airbnb' = 'Booking',
+) {
+  return ingestMailboxEmailSample(apartmentId, { ...payload, provider })
 }
 
 export async function getPushPublicKey(): Promise<string | null> {
