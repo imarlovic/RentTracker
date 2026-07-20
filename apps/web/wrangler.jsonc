@@ -20,10 +20,6 @@
     // Sync linked Airbnb/Booking iCal feeds every 15 minutes
     "crons": ["*/15 * * * *"]
   },
-  // Paid Workers default is higher; free plans remain capped at 50 external subrequests.
-  "limits": {
-    "subrequests": 10000
-  },
   "vars": {
     "GOOGLE_CLIENT_ID": "658207955903-gh23kfhhir9s6u6tsn5rqnkqsck12pss.apps.googleusercontent.com",
     "JWT_ISSUER": "renttracker",
