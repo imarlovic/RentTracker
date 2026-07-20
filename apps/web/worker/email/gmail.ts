@@ -169,7 +169,15 @@ export async function listBookingMessages(
   accessToken: string,
   newerThanDays = 45,
 ): Promise<GmailMessageListItem[]> {
-  const query = `from:booking.com newer_than:${newerThanDays}d`
+  // Include reservation + messaging notifications (EN/HR) that carry reservation details.
+  const query = [
+    'from:(booking.com OR mchat.booking.com)',
+    `(reservation OR rezervacij OR booking OR cancelled OR canceled OR storno OR otkaz`,
+    `OR confirmation OR potvrda OR prijava OR check-in OR "Broj rezervacije"`,
+    `OR "Booking number" OR "Confirmation number" OR "Ime gosta" OR "Guest name"`,
+    `OR "poruku od gosta" OR "request has been confirmed")`,
+    `newer_than:${newerThanDays}d`,
+  ].join(' ')
   const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages')
   url.searchParams.set('q', query)
   url.searchParams.set('maxResults', '50')
