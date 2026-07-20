@@ -231,8 +231,8 @@ export function parseBookingEmail(input: {
   ])
 
   const guestName = firstMatch(text, [
-    /(?:guest\s+name|ime\s+gosta|booked\s+by|customer)\s*[:\-]?\s*([A-Za-zÀ-ÖØ-öø-ÿ' -]{2,80})/i,
-    /(?:dear\s+partner[, ]+)?(?:new reservation for|reservation for)\s+([A-Za-zÀ-ÖØ-öø-ÿ' -]{2,80})/i,
+    /(?:guest\s+name|ime\s+gosta|booked\s+by|customer)\s*[:\-]?\s*([\p{L}][\p{L}' .-]{1,79})/iu,
+    /(?:dear\s+partner[, ]+)?(?:new reservation for|reservation for)\s+([\p{L}][\p{L}' .-]{1,79})/iu,
   ])
 
   const startDate = firstParsableDate(text, [
