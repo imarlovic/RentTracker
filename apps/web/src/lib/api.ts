@@ -199,15 +199,25 @@ export async function startMailboxGmailConnect(
 /** @deprecated Use startMailboxGmailConnect */
 export const startBookingGmailConnect = startMailboxGmailConnect
 
-export async function syncMailboxGmail(apartmentId: string) {
+export async function syncMailboxGmail(
+  apartmentId: string,
+  options?: {
+    newerThanDays?: number
+    maxMessages?: number
+    clearSeen?: boolean
+  },
+) {
   try {
     const { data } = await api.post<{
       scanned: number
       ingested: number
       failed: number
       skipped?: number
+      clearedSeen?: number
+      newerThanDays?: number
+      maxMessages?: number
       byProvider?: Partial<Record<'Booking' | 'Airbnb', number>>
-    }>(`/apartments/${apartmentId}/email-connections/gmail/sync`)
+    }>(`/apartments/${apartmentId}/email-connections/gmail/sync`, options ?? {})
     return data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -220,6 +230,21 @@ export async function syncMailboxGmail(apartmentId: string) {
 
 /** @deprecated Use syncMailboxGmail */
 export const syncBookingGmail = syncMailboxGmail
+
+export async function clearMailboxSeenMessages(apartmentId: string) {
+  try {
+    const { data } = await api.delete<{ cleared: number }>(
+      `/apartments/${apartmentId}/email-connections/seen`,
+    )
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = (error.response?.data as { error?: string } | undefined)?.error
+      throw new Error(message || error.message)
+    }
+    throw error
+  }
+}
 
 export async function disconnectEmailConnection(apartmentId: string, connectionId: string) {
   await api.delete(`/apartments/${apartmentId}/email-connections/${connectionId}`)

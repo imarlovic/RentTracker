@@ -165,11 +165,21 @@ export async function openToken(env: Env, value: string): Promise<string> {
 
 export type GmailMessageListItem = { id: string; threadId: string }
 
+export type ListMailboxOptions = {
+  newerThanDays?: number
+  maxResults?: number
+}
+
 /** List host-mail candidates for Booking + Airbnb from one mailbox. */
 export async function listMailboxMessages(
   accessToken: string,
-  newerThanDays = 45,
+  options: ListMailboxOptions | number = {},
 ): Promise<GmailMessageListItem[]> {
+  // Backward compatible: listMailboxMessages(token, 45)
+  const opts: ListMailboxOptions = typeof options === 'number' ? { newerThanDays: options } : options
+  const newerThanDays = Math.min(365, Math.max(1, Math.floor(opts.newerThanDays ?? 45)))
+  const maxResults = Math.min(100, Math.max(1, Math.floor(opts.maxResults ?? 50)))
+
   const query = [
     'from:(booking.com OR mchat.booking.com OR airbnb.com OR airbnb.co)',
     `(reservation OR rezervacij OR booking OR cancelled OR canceled OR storno OR otkaz`,
@@ -182,7 +192,7 @@ export async function listMailboxMessages(
 
   const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages')
   url.searchParams.set('q', query)
-  url.searchParams.set('maxResults', '50')
+  url.searchParams.set('maxResults', String(maxResults))
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
   if (!res.ok) {
     const text = await res.text()
@@ -198,7 +208,7 @@ export async function listOtaMessages(
   _provider: 'Booking' | 'Airbnb',
   newerThanDays = 45,
 ): Promise<GmailMessageListItem[]> {
-  return listMailboxMessages(accessToken, newerThanDays)
+  return listMailboxMessages(accessToken, { newerThanDays })
 }
 
 /** @deprecated Use listMailboxMessages */
@@ -206,7 +216,7 @@ export async function listBookingMessages(
   accessToken: string,
   newerThanDays = 45,
 ): Promise<GmailMessageListItem[]> {
-  return listMailboxMessages(accessToken, newerThanDays)
+  return listMailboxMessages(accessToken, { newerThanDays })
 }
 
 type GmailHeader = { name: string; value: string }

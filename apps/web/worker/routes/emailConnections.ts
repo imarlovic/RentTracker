@@ -14,6 +14,7 @@ import {
 } from '../email/gmail'
 import { detectEmailProvider, isEmailProvider, type EmailProvider } from '../email/providers'
 import {
+  clearSeenIngestEvents,
   ingestDetectedEmailMessage,
   ingestOtaEmailMessage,
   syncGmailConnection,
@@ -159,12 +160,44 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/sync', async (
   if (!connection) {
     return c.json({ error: 'No mailbox connected. Connect a Gmail inbox first.' }, 404)
   }
+
+  let body: {
+    newerThanDays?: number
+    maxMessages?: number
+    clearSeen?: boolean
+  } = {}
   try {
-    const result = await syncGmailConnection(c.env, connection.id)
+    body = await c.req.json()
+  } catch {
+    body = {}
+  }
+
+  const newerThanDaysRaw = body.newerThanDays ?? Number(c.req.query('newerThanDays'))
+  const maxMessagesRaw = body.maxMessages ?? Number(c.req.query('maxMessages'))
+  const clearSeen =
+    body.clearSeen === true ||
+    c.req.query('clearSeen') === '1' ||
+    c.req.query('clearSeen') === 'true'
+
+  try {
+    const result = await syncGmailConnection(c.env, connection.id, {
+      newerThanDays: Number.isFinite(newerThanDaysRaw) ? newerThanDaysRaw : undefined,
+      maxMessages: Number.isFinite(maxMessagesRaw) ? maxMessagesRaw : undefined,
+      clearSeen,
+    })
     return c.json(result)
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Sync failed' }, 400)
   }
+})
+
+emailConnectionRoutes.delete('/:apartmentId/email-connections/seen', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const cleared = await clearSeenIngestEvents(c.env.DB, apartment.id)
+  return c.json({ cleared })
 })
 
 emailConnectionRoutes.delete('/:apartmentId/email-connections/:connectionId', async (c) => {

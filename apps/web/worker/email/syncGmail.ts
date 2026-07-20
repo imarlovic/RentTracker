@@ -332,14 +332,48 @@ async function upsertMailboxIntegrations(
   }
 }
 
+export type SyncGmailOptions = {
+  newerThanDays?: number
+  maxMessages?: number
+  /** Delete prior ingest events for this apartment so messages can be re-parsed. */
+  clearSeen?: boolean
+}
+
+function clampSyncOptions(options?: SyncGmailOptions): {
+  newerThanDays: number
+  maxMessages: number
+  clearSeen: boolean
+} {
+  return {
+    newerThanDays: Math.min(365, Math.max(1, Math.floor(options?.newerThanDays ?? 45))),
+    maxMessages: Math.min(100, Math.max(1, Math.floor(options?.maxMessages ?? 50))),
+    clearSeen: Boolean(options?.clearSeen),
+  }
+}
+
+export async function clearSeenIngestEvents(
+  db: D1Database,
+  apartmentId: string,
+): Promise<number> {
+  const result = await db
+    .prepare(`DELETE FROM email_ingest_events WHERE apartment_id = ?`)
+    .bind(apartmentId)
+    .run()
+  return result.meta.changes ?? 0
+}
+
 export async function syncGmailConnection(
   env: Env,
   connectionId: string,
+  options?: SyncGmailOptions,
 ): Promise<{
   scanned: number
   ingested: number
   failed: number
   skipped: number
+  clearedSeen: number
+  newerThanDays: number
+  maxMessages: number
   byProvider: Partial<Record<EmailProvider, number>>
 }> {
   const connection = await env.DB.prepare('SELECT * FROM email_connections WHERE id = ?')
@@ -349,9 +383,19 @@ export async function syncGmailConnection(
     throw new Error('Gmail connection not found')
   }
 
+  const opts = clampSyncOptions(options)
+  let clearedSeen = 0
+
   try {
+    if (opts.clearSeen) {
+      clearedSeen = await clearSeenIngestEvents(env.DB, connection.apartment_id)
+    }
+
     const { accessToken } = await resolveAccessToken(env, connection)
-    const messages = await listMailboxMessages(accessToken)
+    const messages = await listMailboxMessages(accessToken, {
+      newerThanDays: opts.newerThanDays,
+      maxResults: opts.maxMessages,
+    })
     let ingested = 0
     let failed = 0
     let skipped = 0
@@ -412,7 +456,16 @@ export async function syncGmailConnection(
       'Airbnb',
     ])
 
-    return { scanned: messages.length, ingested, failed, skipped, byProvider }
+    return {
+      scanned: messages.length,
+      ingested,
+      failed,
+      skipped,
+      clearedSeen,
+      newerThanDays: opts.newerThanDays,
+      maxMessages: opts.maxMessages,
+      byProvider,
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gmail sync failed'
     await env.DB.prepare(

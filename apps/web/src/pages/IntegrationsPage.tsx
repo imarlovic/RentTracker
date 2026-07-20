@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import type { EmailConnection, EmailIngestEvent } from '@/types/api'
 import {
+  clearMailboxSeenMessages,
   createLinkedCalendar,
   deleteLinkedCalendar,
   disconnectEmailConnection,
@@ -60,6 +61,9 @@ function MailboxCard({
 }) {
   const [sampleSubject, setSampleSubject] = useState(SAMPLE_SUBJECT)
   const [sampleBody, setSampleBody] = useState(SAMPLE_BODY)
+  const [newerThanDays, setNewerThanDays] = useState(45)
+  const [maxMessages, setMaxMessages] = useState(50)
+  const [clearSeen, setClearSeen] = useState(false)
 
   const connectMutation = useMutation({
     mutationFn: () => startMailboxGmailConnect(apartmentId),
@@ -72,7 +76,12 @@ function MailboxCard({
   })
 
   const syncMutation = useMutation({
-    mutationFn: () => syncMailboxGmail(apartmentId),
+    mutationFn: () =>
+      syncMailboxGmail(apartmentId, {
+        newerThanDays,
+        maxMessages,
+        clearSeen,
+      }),
     onSuccess: async (result) => {
       const byProvider = result.byProvider
         ? Object.entries(result.byProvider)
@@ -80,13 +89,27 @@ function MailboxCard({
             .join(', ')
         : null
       onMessage(
-        `Mailbox sync: scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
+        `Mailbox sync (${result.newerThanDays ?? newerThanDays}d / max ${result.maxMessages ?? maxMessages}): ` +
+          `scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
+          (result.clearedSeen ? `, cleared ${result.clearedSeen} seen` : '') +
           (byProvider ? ` (${byProvider})` : ''),
       )
+      setClearSeen(false)
       await invalidate()
     },
     onError: (error) => {
       onError(error instanceof Error ? error.message : 'Mailbox sync failed')
+    },
+  })
+
+  const clearSeenMutation = useMutation({
+    mutationFn: () => clearMailboxSeenMessages(apartmentId),
+    onSuccess: async (result) => {
+      onMessage(`Cleared ${result.cleared} already-seen message id(s). Next sync can re-parse them.`)
+      await invalidate()
+    },
+    onError: (error) => {
+      onError(error instanceof Error ? error.message : 'Could not clear seen messages')
     },
   })
 
@@ -128,17 +151,55 @@ function MailboxCard({
       </CardHeader>
       <CardContent className="space-y-3">
         {connection ? (
-          <div className="space-y-2 rounded-lg border px-3 py-3 text-sm">
-            <p>
-              <span className="font-medium">{connection.mailboxEmail}</span>
-              <span className="text-muted-foreground"> · {connection.status}</span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Last sync: {formatSyncTime(connection.lastSyncedAt)}
-            </p>
-            {connection.lastSyncError && (
-              <p className="text-xs text-destructive">{connection.lastSyncError}</p>
-            )}
+          <div className="space-y-3 rounded-lg border px-3 py-3 text-sm">
+            <div className="space-y-2">
+              <p>
+                <span className="font-medium">{connection.mailboxEmail}</span>
+                <span className="text-muted-foreground"> · {connection.status}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Last sync: {formatSyncTime(connection.lastSyncedAt)}
+              </p>
+              {connection.lastSyncError && (
+                <p className="text-xs text-destructive">{connection.lastSyncError}</p>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs">
+                <span className="text-muted-foreground">Lookback (days)</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={newerThanDays}
+                  onChange={(e) => setNewerThanDays(Number(e.target.value) || 1)}
+                />
+              </label>
+              <label className="space-y-1 text-xs">
+                <span className="text-muted-foreground">Max messages</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={maxMessages}
+                  onChange={(e) => setMaxMessages(Number(e.target.value) || 1)}
+                />
+              </label>
+            </div>
+
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={clearSeen}
+                onChange={(e) => setClearSeen(e.target.checked)}
+              />
+              <span>
+                Clear already-seen message ids before sync (re-parse previously ingested mail)
+              </span>
+            </label>
+
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 type="button"
@@ -146,7 +207,16 @@ function MailboxCard({
                 onClick={() => syncMutation.mutate()}
                 disabled={syncMutation.isPending}
               >
-                Sync mailbox now
+                {syncMutation.isPending ? 'Syncing…' : 'Sync mailbox now'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => clearSeenMutation.mutate()}
+                disabled={clearSeenMutation.isPending}
+              >
+                {clearSeenMutation.isPending ? 'Clearing…' : 'Clear seen only'}
               </Button>
               <Button
                 type="button"
