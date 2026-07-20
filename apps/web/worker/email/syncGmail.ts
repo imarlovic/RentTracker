@@ -86,13 +86,47 @@ async function alreadyIngested(
   apartmentId: string,
   messageId: string,
 ): Promise<boolean> {
+  // Only skip terminal outcomes. Failed rows (e.g. subrequest quota) must be retryable.
   const row = await db
     .prepare(
-      `SELECT id FROM email_ingest_events WHERE apartment_id = ? AND message_id = ? LIMIT 1`,
+      `SELECT id FROM email_ingest_events
+       WHERE apartment_id = ? AND message_id = ?
+         AND parse_status IN ('parsed', 'ignored')
+       LIMIT 1`,
     )
     .bind(apartmentId, messageId)
     .first()
   return Boolean(row)
+}
+
+/** Transient Worker/Gmail failures that should not permanently block a message. */
+function isRetryableIngestFailure(error: string): boolean {
+  return /too many subrequests|subrequest|quota|rate limit|429|503|timeout|network/i.test(
+    error,
+  )
+}
+
+export async function clearRetryableFailedIngestEvents(
+  db: D1Database,
+  apartmentId: string,
+): Promise<number> {
+  const result = await db
+    .prepare(
+      `DELETE FROM email_ingest_events
+       WHERE apartment_id = ?
+         AND parse_status = 'failed'
+         AND (
+           parse_error LIKE '%subrequest%'
+           OR parse_error LIKE '%Too many%'
+           OR parse_error LIKE '%429%'
+           OR parse_error LIKE '%503%'
+           OR parse_error LIKE '%quota%'
+           OR parse_error LIKE '%rate limit%'
+         )`,
+    )
+    .bind(apartmentId)
+    .run()
+  return result.meta.changes ?? 0
 }
 
 export async function recordIngestEvent(
@@ -344,12 +378,19 @@ export type SyncGmailOptions = {
   mode?: 'sync' | 'history'
 }
 
+/**
+ * Free Workers allow only ~50 external subrequests/invocation. Each Gmail message
+ * fetch counts, so keep a hard per-invocation ceiling and continue across requests.
+ */
+const MAX_GMAIL_FETCHES_PER_INVOCATION = 20
+
 function clampSyncOptions(options?: SyncGmailOptions): {
   newerThanDays: number
   maxMessages: number
   clearSeen: boolean
   mode: 'sync' | 'history'
   maxScan: number
+  batchLimit: number
 } {
   const mode = options?.mode === 'history' ? 'history' : 'sync'
   if (mode === 'history') {
@@ -360,6 +401,7 @@ function clampSyncOptions(options?: SyncGmailOptions): {
       clearSeen: Boolean(options?.clearSeen),
       mode,
       maxScan: Math.min(1000, Math.max(maxMessages * 5, 400)),
+      batchLimit: Math.min(MAX_GMAIL_FETCHES_PER_INVOCATION, maxMessages),
     }
   }
   const maxMessages = Math.min(200, Math.max(1, Math.floor(options?.maxMessages ?? 50)))
@@ -369,6 +411,7 @@ function clampSyncOptions(options?: SyncGmailOptions): {
     clearSeen: Boolean(options?.clearSeen),
     mode,
     maxScan: Math.min(500, Math.max(maxMessages * 10, 200)),
+    batchLimit: Math.min(MAX_GMAIL_FETCHES_PER_INVOCATION, maxMessages),
   }
 }
 
@@ -389,13 +432,20 @@ async function collectUnseenMailboxMessages(
   accessToken: string,
   apartmentId: string,
   opts: { newerThanDays: number; maxMessages: number; maxScan: number },
-): Promise<{ messages: GmailMessageListItem[]; listed: number; pages: number; skippedSeen: number }> {
+): Promise<{
+  messages: GmailMessageListItem[]
+  listed: number
+  pages: number
+  skippedSeen: number
+  exhausted: boolean
+}> {
   const query = buildMailboxSearchQuery(opts.newerThanDays)
   const messages: GmailMessageListItem[] = []
   let pageToken: string | undefined
   let listed = 0
   let pages = 0
   let skippedSeen = 0
+  let exhausted = false
 
   while (messages.length < opts.maxMessages && listed < opts.maxScan) {
     const page = await listMailboxMessagesPage(accessToken, query, 100, pageToken)
@@ -412,12 +462,17 @@ async function collectUnseenMailboxMessages(
       }
     }
     if (!page.nextPageToken || page.messages.length === 0) {
+      exhausted = true
       break
     }
     pageToken = page.nextPageToken
   }
 
-  return { messages, listed, pages, skippedSeen }
+  if (!exhausted && messages.length < opts.maxMessages && listed >= opts.maxScan) {
+    exhausted = true
+  }
+
+  return { messages, listed, pages, skippedSeen, exhausted }
 }
 
 export async function syncGmailConnection(
@@ -435,6 +490,8 @@ export async function syncGmailConnection(
   newerThanDays: number
   maxMessages: number
   mode: 'sync' | 'history'
+  hasMore: boolean
+  done: boolean
   byProvider: Partial<Record<EmailProvider, number>>
 }> {
   const connection = await env.DB.prepare('SELECT * FROM email_connections WHERE id = ?')
@@ -450,6 +507,9 @@ export async function syncGmailConnection(
   try {
     if (opts.clearSeen) {
       clearedSeen = await clearSeenIngestEvents(env.DB, connection.apartment_id)
+    } else {
+      // Unblock messages that previously failed only due to Worker subrequest limits.
+      clearedSeen = await clearRetryableFailedIngestEvents(env.DB, connection.apartment_id)
     }
 
     const { accessToken } = await resolveAccessToken(env, connection)
@@ -457,12 +517,17 @@ export async function syncGmailConnection(
       env,
       accessToken,
       connection.apartment_id,
-      opts,
+      {
+        newerThanDays: opts.newerThanDays,
+        maxMessages: opts.batchLimit,
+        maxScan: opts.maxScan,
+      },
     )
     const messages = collected.messages
     let ingested = 0
     let failed = 0
     let skipped = collected.skippedSeen
+    let hitSubrequestLimit = false
     const byProvider: Partial<Record<EmailProvider, number>> = {}
 
     for (const item of messages) {
@@ -491,19 +556,29 @@ export async function syncGmailConnection(
           }
         }
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'Message fetch failed'
+        if (isRetryableIngestFailure(message)) {
+          hitSubrequestLimit = true
+          // Do not persist retryable failures as seen — stop this batch and continue later.
+          break
+        }
         failed++
         await recordIngestEvent(env.DB, {
           apartmentId: connection.apartment_id,
           connectionId: connection.id,
           messageId: item.id,
           parseStatus: 'failed',
-          parseError: error instanceof Error ? error.message : 'Message fetch failed',
+          parseError: message,
         })
       }
     }
 
     const syncedAt = nowIso()
-    if (opts.mode === 'history') {
+    const hasMore =
+      !hitSubrequestLimit && messages.length >= opts.batchLimit && !collected.exhausted
+    const done = !hasMore && !hitSubrequestLimit
+
+    if (opts.mode === 'history' && done) {
       await env.DB.prepare(
         `UPDATE email_connections
          SET last_synced_at = ?, history_imported_at = ?, last_sync_error = NULL,
@@ -538,6 +613,8 @@ export async function syncGmailConnection(
       newerThanDays: opts.newerThanDays,
       maxMessages: opts.maxMessages,
       mode: opts.mode,
+      hasMore: hasMore || hitSubrequestLimit,
+      done: done && !hitSubrequestLimit,
       byProvider,
     }
   } catch (error) {

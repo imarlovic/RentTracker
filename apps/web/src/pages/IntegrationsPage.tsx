@@ -11,7 +11,7 @@ import {
   createLinkedCalendar,
   deleteLinkedCalendar,
   disconnectEmailConnection,
-  importMailboxHistory,
+  importMailboxHistoryBatched,
   ingestMailboxEmailSample,
   listEmailConnections,
   listEmailIngestEvents,
@@ -128,12 +128,25 @@ function MailboxCard({
 
   const historyMutation = useMutation({
     mutationFn: () =>
-      importMailboxHistory(apartmentId, {
+      importMailboxHistoryBatched(apartmentId, {
         newerThanDays: historyDays,
         maxMessages: historyMaxMessages,
+        onProgress: (round, partial) => {
+          onMessage(
+            `History import round ${round}: scanned ${partial.scanned}, ingested ${partial.ingested}` +
+              (partial.hasMore ? '… continuing' : ''),
+          )
+        },
       }),
     onSuccess: async (result) => {
-      onMessage(formatSyncResult('History import', result, historyDays, historyMaxMessages))
+      onMessage(
+        formatSyncResult(
+          `History import (${result.rounds} batch${result.rounds === 1 ? '' : 'es'})`,
+          result,
+          historyDays,
+          historyMaxMessages,
+        ),
+      )
       await invalidate()
     },
     onError: (error) => {

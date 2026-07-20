@@ -255,6 +255,8 @@ export async function importMailboxHistory(
       newerThanDays?: number
       maxMessages?: number
       mode?: 'sync' | 'history'
+      hasMore?: boolean
+      done?: boolean
       byProvider?: Partial<Record<'Booking' | 'Airbnb', number>>
     }>(`/apartments/${apartmentId}/email-connections/gmail/import-history`, options ?? {})
     return data
@@ -265,6 +267,69 @@ export async function importMailboxHistory(
     }
     throw error
   }
+}
+
+/** Run history import in Worker-safe batches until complete or maxRounds. */
+export async function importMailboxHistoryBatched(
+  apartmentId: string,
+  options?: {
+    newerThanDays?: number
+    maxMessages?: number
+    clearSeen?: boolean
+    maxRounds?: number
+    onProgress?: (round: number, partial: Awaited<ReturnType<typeof importMailboxHistory>>) => void
+  },
+) {
+  const maxRounds = options?.maxRounds ?? 40
+  let round = 0
+  let total = {
+    scanned: 0,
+    listed: 0,
+    pages: 0,
+    ingested: 0,
+    failed: 0,
+    skipped: 0,
+    clearedSeen: 0,
+    newerThanDays: options?.newerThanDays ?? 180,
+    maxMessages: options?.maxMessages ?? 300,
+    mode: 'history' as const,
+    hasMore: true,
+    done: false,
+    byProvider: {} as Partial<Record<'Booking' | 'Airbnb', number>>,
+  }
+
+  while (round < maxRounds) {
+    round += 1
+    const partial = await importMailboxHistory(apartmentId, {
+      newerThanDays: options?.newerThanDays,
+      maxMessages: options?.maxMessages,
+      // Only clear on the first round when requested.
+      clearSeen: round === 1 ? options?.clearSeen : false,
+    })
+    options?.onProgress?.(round, partial)
+
+    total.scanned += partial.scanned
+    total.listed = Math.max(total.listed, partial.listed ?? 0)
+    total.pages += partial.pages ?? 0
+    total.ingested += partial.ingested
+    total.failed += partial.failed
+    total.skipped += partial.skipped ?? 0
+    total.clearedSeen += partial.clearedSeen ?? 0
+    total.newerThanDays = partial.newerThanDays ?? total.newerThanDays
+    total.maxMessages = partial.maxMessages ?? total.maxMessages
+    for (const [provider, count] of Object.entries(partial.byProvider ?? {})) {
+      const key = provider as 'Booking' | 'Airbnb'
+      total.byProvider[key] = (total.byProvider[key] ?? 0) + (count ?? 0)
+    }
+
+    if (partial.done || !partial.hasMore) {
+      total.done = true
+      total.hasMore = false
+      break
+    }
+  }
+
+  return { ...total, rounds: round }
 }
 
 export async function clearMailboxSeenMessages(apartmentId: string) {
