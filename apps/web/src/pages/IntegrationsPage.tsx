@@ -11,6 +11,7 @@ import {
   createLinkedCalendar,
   deleteLinkedCalendar,
   disconnectEmailConnection,
+  importMailboxHistory,
   ingestMailboxEmailSample,
   listEmailConnections,
   listEmailIngestEvents,
@@ -64,6 +65,8 @@ function MailboxCard({
   const [newerThanDays, setNewerThanDays] = useState(45)
   const [maxMessages, setMaxMessages] = useState(50)
   const [clearSeen, setClearSeen] = useState(false)
+  const [historyDays, setHistoryDays] = useState(180)
+  const [historyMaxMessages, setHistoryMaxMessages] = useState(300)
 
   const connectMutation = useMutation({
     mutationFn: () => startMailboxGmailConnect(apartmentId),
@@ -75,6 +78,37 @@ function MailboxCard({
     },
   })
 
+  const formatSyncResult = (
+    label: string,
+    result: {
+      newerThanDays?: number
+      maxMessages?: number
+      listed?: number
+      pages?: number
+      scanned: number
+      ingested: number
+      failed: number
+      clearedSeen?: number
+      byProvider?: Partial<Record<'Booking' | 'Airbnb', number>>
+    },
+    fallbackDays: number,
+    fallbackMax: number,
+  ) => {
+    const byProvider = result.byProvider
+      ? Object.entries(result.byProvider)
+          .map(([provider, count]) => `${provider}: ${count}`)
+          .join(', ')
+      : null
+    return (
+      `${label} (${result.newerThanDays ?? fallbackDays}d / max ${result.maxMessages ?? fallbackMax}` +
+      (result.listed != null ? `, listed ${result.listed}` : '') +
+      (result.pages != null ? `/${result.pages}p` : '') +
+      `): scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
+      (result.clearedSeen ? `, cleared ${result.clearedSeen} seen` : '') +
+      (byProvider ? ` (${byProvider})` : '')
+    )
+  }
+
   const syncMutation = useMutation({
     mutationFn: () =>
       syncMailboxGmail(apartmentId, {
@@ -83,24 +117,27 @@ function MailboxCard({
         clearSeen,
       }),
     onSuccess: async (result) => {
-      const byProvider = result.byProvider
-        ? Object.entries(result.byProvider)
-            .map(([provider, count]) => `${provider}: ${count}`)
-            .join(', ')
-        : null
-      onMessage(
-        `Mailbox sync (${result.newerThanDays ?? newerThanDays}d / max ${result.maxMessages ?? maxMessages}` +
-          (result.listed != null ? `, listed ${result.listed}` : '') +
-          (result.pages != null ? `/${result.pages}p` : '') +
-          `): scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}` +
-          (result.clearedSeen ? `, cleared ${result.clearedSeen} seen` : '') +
-          (byProvider ? ` (${byProvider})` : ''),
-      )
+      onMessage(formatSyncResult('Mailbox sync', result, newerThanDays, maxMessages))
       setClearSeen(false)
       await invalidate()
     },
     onError: (error) => {
       onError(error instanceof Error ? error.message : 'Mailbox sync failed')
+    },
+  })
+
+  const historyMutation = useMutation({
+    mutationFn: () =>
+      importMailboxHistory(apartmentId, {
+        newerThanDays: historyDays,
+        maxMessages: historyMaxMessages,
+      }),
+    onSuccess: async (result) => {
+      onMessage(formatSyncResult('History import', result, historyDays, historyMaxMessages))
+      await invalidate()
+    },
+    onError: (error) => {
+      onError(error instanceof Error ? error.message : 'History import failed')
     },
   })
 
@@ -142,6 +179,12 @@ function MailboxCard({
     },
   })
 
+  const busy =
+    syncMutation.isPending ||
+    historyMutation.isPending ||
+    clearSeenMutation.isPending ||
+    disconnectMutation.isPending
+
   return (
     <Card>
       <CardHeader>
@@ -161,6 +204,9 @@ function MailboxCard({
               </p>
               <p className="text-xs text-muted-foreground">
                 Last sync: {formatSyncTime(connection.lastSyncedAt)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                History import: {formatSyncTime(connection.historyImportedAt)}
               </p>
               {connection.lastSyncError && (
                 <p className="text-xs text-destructive">{connection.lastSyncError}</p>
@@ -207,7 +253,7 @@ function MailboxCard({
                 type="button"
                 size="sm"
                 onClick={() => syncMutation.mutate()}
-                disabled={syncMutation.isPending}
+                disabled={busy}
               >
                 {syncMutation.isPending ? 'Syncing…' : 'Sync mailbox now'}
               </Button>
@@ -216,7 +262,7 @@ function MailboxCard({
                 size="sm"
                 variant="outline"
                 onClick={() => clearSeenMutation.mutate()}
-                disabled={clearSeenMutation.isPending}
+                disabled={busy}
               >
                 {clearSeenMutation.isPending ? 'Clearing…' : 'Clear seen only'}
               </Button>
@@ -225,7 +271,7 @@ function MailboxCard({
                 size="sm"
                 variant="outline"
                 onClick={() => connectMutation.mutate()}
-                disabled={connectMutation.isPending}
+                disabled={busy || connectMutation.isPending}
               >
                 Reconnect…
               </Button>
@@ -234,9 +280,61 @@ function MailboxCard({
                 size="sm"
                 variant="outline"
                 onClick={() => disconnectMutation.mutate(connection.id)}
-                disabled={disconnectMutation.isPending}
+                disabled={busy}
               >
                 Disconnect
+              </Button>
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-sm font-medium">Import history (one-time)</p>
+              <p className="text-xs text-muted-foreground">
+                Deeper scan for past Booking/Airbnb confirmations. Uses a tight Gmail filter so
+                reviews and promo mail are skipped. Safe to re-run; already-seen ids are skipped.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[90, 180, 365].map((days) => (
+                  <Button
+                    key={days}
+                    type="button"
+                    size="sm"
+                    variant={historyDays === days ? 'default' : 'outline'}
+                    onClick={() => setHistoryDays(days)}
+                    disabled={busy}
+                  >
+                    {days}d
+                  </Button>
+                ))}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-xs">
+                  <span className="text-muted-foreground">History lookback (days)</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={historyDays}
+                    onChange={(e) => setHistoryDays(Number(e.target.value) || 1)}
+                  />
+                </label>
+                <label className="space-y-1 text-xs">
+                  <span className="text-muted-foreground">History max messages</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={historyMaxMessages}
+                    onChange={(e) => setHistoryMaxMessages(Number(e.target.value) || 1)}
+                  />
+                </label>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => historyMutation.mutate()}
+                disabled={busy}
+              >
+                {historyMutation.isPending ? 'Importing…' : 'Import mailbox history'}
               </Button>
             </div>
           </div>

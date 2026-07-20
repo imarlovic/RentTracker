@@ -35,6 +35,7 @@ function toConnectionDto(row: EmailConnectionRow) {
     status: row.status,
     lastSyncedAt: row.last_synced_at,
     lastSyncError: row.last_sync_error,
+    historyImportedAt: row.history_imported_at ?? null,
     createdAt: row.created_at,
   }
 }
@@ -165,6 +166,7 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/sync', async (
     newerThanDays?: number
     maxMessages?: number
     clearSeen?: boolean
+    mode?: 'sync' | 'history'
   } = {}
   try {
     body = await c.req.json()
@@ -178,16 +180,58 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/sync', async (
     body.clearSeen === true ||
     c.req.query('clearSeen') === '1' ||
     c.req.query('clearSeen') === 'true'
+  const mode = body.mode === 'history' || c.req.query('mode') === 'history' ? 'history' : 'sync'
 
   try {
     const result = await syncGmailConnection(c.env, connection.id, {
       newerThanDays: Number.isFinite(newerThanDaysRaw) ? newerThanDaysRaw : undefined,
       maxMessages: Number.isFinite(maxMessagesRaw) ? maxMessagesRaw : undefined,
       clearSeen,
+      mode,
     })
     return c.json(result)
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Sync failed' }, 400)
+  }
+})
+
+emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/import-history', async (c) => {
+  const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
+  if (!apartment) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const connection = await c.env.DB.prepare(
+    `SELECT * FROM email_connections
+     WHERE apartment_id = ? AND kind = 'gmail'
+     LIMIT 1`,
+  )
+    .bind(apartment.id)
+    .first<EmailConnectionRow>()
+  if (!connection) {
+    return c.json({ error: 'No mailbox connected. Connect a Gmail inbox first.' }, 404)
+  }
+
+  let body: {
+    newerThanDays?: number
+    maxMessages?: number
+    clearSeen?: boolean
+  } = {}
+  try {
+    body = await c.req.json()
+  } catch {
+    body = {}
+  }
+
+  try {
+    const result = await syncGmailConnection(c.env, connection.id, {
+      newerThanDays: body.newerThanDays,
+      maxMessages: body.maxMessages,
+      clearSeen: body.clearSeen,
+      mode: 'history',
+    })
+    return c.json(result)
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'History import failed' }, 400)
   }
 })
 

@@ -205,6 +205,7 @@ export async function syncMailboxGmail(
     newerThanDays?: number
     maxMessages?: number
     clearSeen?: boolean
+    mode?: 'sync' | 'history'
   },
 ) {
   try {
@@ -218,6 +219,7 @@ export async function syncMailboxGmail(
       clearedSeen?: number
       newerThanDays?: number
       maxMessages?: number
+      mode?: 'sync' | 'history'
       byProvider?: Partial<Record<'Booking' | 'Airbnb', number>>
     }>(`/apartments/${apartmentId}/email-connections/gmail/sync`, options ?? {})
     return data
@@ -232,6 +234,38 @@ export async function syncMailboxGmail(
 
 /** @deprecated Use syncMailboxGmail */
 export const syncBookingGmail = syncMailboxGmail
+
+export async function importMailboxHistory(
+  apartmentId: string,
+  options?: {
+    newerThanDays?: number
+    maxMessages?: number
+    clearSeen?: boolean
+  },
+) {
+  try {
+    const { data } = await api.post<{
+      scanned: number
+      listed?: number
+      pages?: number
+      ingested: number
+      failed: number
+      skipped?: number
+      clearedSeen?: number
+      newerThanDays?: number
+      maxMessages?: number
+      mode?: 'sync' | 'history'
+      byProvider?: Partial<Record<'Booking' | 'Airbnb', number>>
+    }>(`/apartments/${apartmentId}/email-connections/gmail/import-history`, options ?? {})
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message = (error.response?.data as { error?: string } | undefined)?.error
+      throw new Error(message || error.message)
+    }
+    throw error
+  }
+}
 
 export async function clearMailboxSeenMessages(apartmentId: string) {
   try {

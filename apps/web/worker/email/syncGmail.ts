@@ -29,6 +29,7 @@ export type EmailConnectionRow = {
   gmail_history_id: string | null
   last_synced_at: string | null
   last_sync_error: string | null
+  history_imported_at?: string | null
   created_at: string
 }
 
@@ -339,17 +340,35 @@ export type SyncGmailOptions = {
   maxMessages?: number
   /** Delete prior ingest events for this apartment so messages can be re-parsed. */
   clearSeen?: boolean
+  /** One-shot deeper import with larger defaults/limits. */
+  mode?: 'sync' | 'history'
 }
 
 function clampSyncOptions(options?: SyncGmailOptions): {
   newerThanDays: number
   maxMessages: number
   clearSeen: boolean
+  mode: 'sync' | 'history'
+  maxScan: number
 } {
+  const mode = options?.mode === 'history' ? 'history' : 'sync'
+  if (mode === 'history') {
+    const maxMessages = Math.min(500, Math.max(1, Math.floor(options?.maxMessages ?? 300)))
+    return {
+      newerThanDays: Math.min(365, Math.max(1, Math.floor(options?.newerThanDays ?? 180))),
+      maxMessages,
+      clearSeen: Boolean(options?.clearSeen),
+      mode,
+      maxScan: Math.min(1000, Math.max(maxMessages * 5, 400)),
+    }
+  }
+  const maxMessages = Math.min(200, Math.max(1, Math.floor(options?.maxMessages ?? 50)))
   return {
     newerThanDays: Math.min(365, Math.max(1, Math.floor(options?.newerThanDays ?? 45))),
-    maxMessages: Math.min(200, Math.max(1, Math.floor(options?.maxMessages ?? 50))),
+    maxMessages,
     clearSeen: Boolean(options?.clearSeen),
+    mode,
+    maxScan: Math.min(500, Math.max(maxMessages * 10, 200)),
   }
 }
 
@@ -369,17 +388,16 @@ async function collectUnseenMailboxMessages(
   env: Env,
   accessToken: string,
   apartmentId: string,
-  opts: { newerThanDays: number; maxMessages: number },
+  opts: { newerThanDays: number; maxMessages: number; maxScan: number },
 ): Promise<{ messages: GmailMessageListItem[]; listed: number; pages: number; skippedSeen: number }> {
   const query = buildMailboxSearchQuery(opts.newerThanDays)
-  const maxScan = Math.min(500, Math.max(opts.maxMessages * 10, 200))
   const messages: GmailMessageListItem[] = []
   let pageToken: string | undefined
   let listed = 0
   let pages = 0
   let skippedSeen = 0
 
-  while (messages.length < opts.maxMessages && listed < maxScan) {
+  while (messages.length < opts.maxMessages && listed < opts.maxScan) {
     const page = await listMailboxMessagesPage(accessToken, query, 100, pageToken)
     pages += 1
     listed += page.messages.length
@@ -416,6 +434,7 @@ export async function syncGmailConnection(
   clearedSeen: number
   newerThanDays: number
   maxMessages: number
+  mode: 'sync' | 'history'
   byProvider: Partial<Record<EmailProvider, number>>
 }> {
   const connection = await env.DB.prepare('SELECT * FROM email_connections WHERE id = ?')
@@ -484,13 +503,24 @@ export async function syncGmailConnection(
     }
 
     const syncedAt = nowIso()
-    await env.DB.prepare(
-      `UPDATE email_connections
-       SET last_synced_at = ?, last_sync_error = NULL, status = 'Active', provider = 'Mailbox'
-       WHERE id = ?`,
-    )
-      .bind(syncedAt, connection.id)
-      .run()
+    if (opts.mode === 'history') {
+      await env.DB.prepare(
+        `UPDATE email_connections
+         SET last_synced_at = ?, history_imported_at = ?, last_sync_error = NULL,
+             status = 'Active', provider = 'Mailbox'
+         WHERE id = ?`,
+      )
+        .bind(syncedAt, syncedAt, connection.id)
+        .run()
+    } else {
+      await env.DB.prepare(
+        `UPDATE email_connections
+         SET last_synced_at = ?, last_sync_error = NULL, status = 'Active', provider = 'Mailbox'
+         WHERE id = ?`,
+      )
+        .bind(syncedAt, connection.id)
+        .run()
+    }
 
     await upsertMailboxIntegrations(env.DB, connection.apartment_id, syncedAt, null, [
       'Booking',
@@ -507,6 +537,7 @@ export async function syncGmailConnection(
       clearedSeen,
       newerThanDays: opts.newerThanDays,
       maxMessages: opts.maxMessages,
+      mode: opts.mode,
       byProvider,
     }
   } catch (error) {

@@ -176,23 +176,40 @@ export type ListMailboxOptions = {
 /** Gmail search focused on reservation confirmations / changes, not marketing noise. */
 export function buildMailboxSearchQuery(newerThanDays: number): string {
   const days = Math.min(365, Math.max(1, Math.floor(newerThanDays)))
-  // Keep this tight: a broad "guest/reservation" query fills the first page with
-  // reviews, security alerts, and promo mail — older confirmations never appear.
-  return [
-    'from:(airbnb.com OR airbnb.co OR booking.com OR mchat.booking.com OR properties.booking.com)',
+
+  // Provider-specific subject filters beat a broad keyword OR-list that matches
+  // reviews, security alerts, and promo digests.
+  const airbnb = [
+    'from:(automated@airbnb.com OR airbnb.com OR airbnb.co)',
     '(',
     'subject:("Rezervacija je potvrđena" OR "Reservation confirmed" OR "Booking confirmed"',
-    'OR "New booking" OR "Reservation confirmation" OR "Modified reservation"',
-    'OR "Reservation altered" OR "has been cancelled" OR "has been canceled"',
-    'OR "request has been confirmed" OR "potvrđena je nova" OR "Konfirmacijski kod"',
-    'OR "Confirmation code" OR "Broj rezervacije" OR "Booking number" OR "Confirmation number")',
-    'OR "konfirmacijski kod" OR "confirmation code" OR "broj rezervacije" OR "booking number"',
-    'OR "confirmation number" OR "reservation number" OR "potvrđena je nova rezervacija"',
-    'OR "you have a new reservation" OR "rezervacija je otkazana" OR "reservation canceled"',
-    'OR "reservation cancelled"',
+    'OR "Reservation canceled" OR "Reservation cancelled" OR "Reservation altered"',
+    'OR "Reservation modified" OR "confirmation code" OR Konfirmacijski OR dolazi OR arrives)',
+    'OR "konfirmacijski kod" OR "confirmation code" OR "potvrđena je nova rezervacija"',
     ')',
-    `newer_than:${days}d`,
   ].join(' ')
+
+  const booking = [
+    'from:(noreply@booking.com OR no-reply@booking.com OR noreply@mchat.booking.com OR mchat.booking.com OR properties.booking.com)',
+    '(',
+    'subject:("New booking" OR "Reservation confirmation" OR "Modified reservation"',
+    'OR "has been cancelled" OR "has been canceled" OR "request has been confirmed"',
+    'OR "Nova rezervacija" OR "Broj rezervacije" OR "Reservation cancelled"',
+    'OR "Reservation canceled" OR potvrđen OR potvrden)',
+    'OR "Broj rezervacije" OR "Confirmation number" OR "Booking number" OR "reservation number"',
+    ')',
+  ].join(' ')
+
+  // Drop high-volume noise that still comes from OTA domains.
+  const exclude = [
+    '-from:(partneraccountsecurity@booking.com OR security@booking.com)',
+    '-subject:(zvjezdica OR "left a review" OR "gave you" OR "5 star" OR "5-star"',
+    'OR Security OR "sign-in" OR "sign in" OR "New sign-in" OR newsletter',
+    'OR Povećajte OR "stopu klikanja" OR cjenika OR "Mjesečni pregled"',
+    'OR Pretvorite OR "transaction history" OR "Vaša zarada ovaj" OR "weekly earnings")',
+  ].join(' ')
+
+  return `((${airbnb}) OR (${booking})) ${exclude} newer_than:${days}d`
 }
 
 type ListPageResult = {

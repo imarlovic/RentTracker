@@ -47,6 +47,7 @@ export type EmailConnection = {
   status: string
   lastSyncedAt?: string | null
   lastSyncError?: string | null
+  historyImportedAt?: string | null
   createdAt: string
 }
 
