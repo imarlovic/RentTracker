@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import { newId, nowIso } from '../db'
+import { parseAirbnbEmail } from '../email/airbnbParse'
+import { parseBookingEmail } from '../email/bookingParse'
 import {
   buildGmailAuthUrl,
   createGmailOAuthState,
@@ -10,8 +12,12 @@ import {
   sealToken,
   verifyGmailOAuthState,
 } from '../email/gmail'
-import { ingestBookingEmailMessage, syncGmailConnection, type EmailConnectionRow } from '../email/syncGmail'
-import { parseBookingEmail } from '../email/bookingParse'
+import { isEmailProvider, type EmailProvider } from '../email/providers'
+import {
+  ingestOtaEmailMessage,
+  syncGmailConnection,
+  type EmailConnectionRow,
+} from '../email/syncGmail'
 import type { Env, Variables } from '../env'
 import { getOwnedApartment } from '../ownership'
 
@@ -29,6 +35,10 @@ function toConnectionDto(row: EmailConnectionRow) {
     lastSyncError: row.last_sync_error,
     createdAt: row.created_at,
   }
+}
+
+function providerFromQuery(raw: string | undefined): EmailProvider {
+  return raw === 'Airbnb' ? 'Airbnb' : 'Booking'
 }
 
 emailConnectionRoutes.get('/:apartmentId/email-connections', async (c) => {
@@ -91,16 +101,19 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/start', async 
     return c.json({ error: 'Not found' }, 404)
   }
 
+  const provider = providerFromQuery(c.req.query('provider'))
+
   try {
     const { clientId } = requireGoogleOAuthConfig(c.env)
     const state = await createGmailOAuthState(c.env, {
       userId: c.get('userId'),
       apartmentId: apartment.id,
       nonce: newId(),
+      provider,
     })
     const redirectUri = gmailRedirectUri(c.req.url)
     const authUrl = buildGmailAuthUrl({ clientId, redirectUri, state })
-    return c.json({ authUrl, redirectUri })
+    return c.json({ authUrl, redirectUri, provider })
   } catch (error) {
     return c.json(
       { error: error instanceof Error ? error.message : 'Gmail OAuth is not configured' },
@@ -114,15 +127,16 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/gmail/sync', async (
   if (!apartment) {
     return c.json({ error: 'Not found' }, 404)
   }
+  const provider = providerFromQuery(c.req.query('provider'))
   const connection = await c.env.DB.prepare(
     `SELECT * FROM email_connections
-     WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'
+     WHERE apartment_id = ? AND kind = 'gmail' AND provider = ?
      LIMIT 1`,
   )
-    .bind(apartment.id)
+    .bind(apartment.id, provider)
     .first<EmailConnectionRow>()
   if (!connection) {
-    return c.json({ error: 'No Booking Gmail connection. Connect a mailbox first.' }, 404)
+    return c.json({ error: `No ${provider} Gmail connection. Connect a mailbox first.` }, 404)
   }
   try {
     const result = await syncGmailConnection(c.env, connection.id)
@@ -152,11 +166,22 @@ emailConnectionRoutes.delete('/:apartmentId/email-connections/:connectionId', as
 })
 
 /** Manual ingest for testing parsers without Gmail OAuth. */
-emailConnectionRoutes.post('/:apartmentId/email-connections/booking/ingest', async (c) => {
+emailConnectionRoutes.post('/:apartmentId/email-connections/:provider/ingest', async (c) => {
   const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
   if (!apartment) {
     return c.json({ error: 'Not found' }, 404)
   }
+  const providerParam = c.req.param('provider')
+  const provider: EmailProvider =
+    providerParam.toLowerCase() === 'airbnb'
+      ? 'Airbnb'
+      : providerParam.toLowerCase() === 'booking'
+        ? 'Booking'
+        : 'Booking'
+  if (providerParam.toLowerCase() !== 'airbnb' && providerParam.toLowerCase() !== 'booking') {
+    return c.json({ error: 'provider must be booking or airbnb' }, 400)
+  }
+
   let body: {
     subject?: string
     bodyText?: string
@@ -174,17 +199,19 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/booking/ingest', asy
   }
 
   const connection = await c.env.DB.prepare(
-    `SELECT id FROM email_connections WHERE apartment_id = ? AND kind = 'gmail' LIMIT 1`,
+    `SELECT id FROM email_connections WHERE apartment_id = ? AND kind = 'gmail' AND provider = ? LIMIT 1`,
   )
-    .bind(apartment.id)
+    .bind(apartment.id, provider)
     .first<{ id: string }>()
 
-  const result = await ingestBookingEmailMessage(c.env, {
+  const result = await ingestOtaEmailMessage(c.env, {
     apartmentId: apartment.id,
     connectionId: connection?.id ?? null,
+    provider,
     userId: c.get('userId'),
     messageId: body.messageId || `manual:${newId()}`,
-    fromAddress: body.fromAddress || 'manual@booking.com',
+    fromAddress:
+      body.fromAddress || (provider === 'Airbnb' ? 'manual@airbnb.com' : 'manual@booking.com'),
     subject: body.subject,
     receivedAt: nowIso(),
     bodyText: body.bodyText,
@@ -194,10 +221,14 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/booking/ingest', asy
   return c.json(result)
 })
 
-emailConnectionRoutes.post('/:apartmentId/email-connections/booking/parse-preview', async (c) => {
+emailConnectionRoutes.post('/:apartmentId/email-connections/:provider/parse-preview', async (c) => {
   const apartment = await getOwnedApartment(c.env.DB, c.req.param('apartmentId'), c.get('userId'))
   if (!apartment) {
     return c.json({ error: 'Not found' }, 404)
+  }
+  const providerParam = c.req.param('provider').toLowerCase()
+  if (providerParam !== 'airbnb' && providerParam !== 'booking') {
+    return c.json({ error: 'provider must be booking or airbnb' }, 400)
   }
   let body: { subject?: string; bodyText?: string; bodyHtml?: string } = {}
   try {
@@ -205,7 +236,7 @@ emailConnectionRoutes.post('/:apartmentId/email-connections/booking/parse-previe
   } catch {
     body = {}
   }
-  return c.json(parseBookingEmail(body))
+  return c.json(providerParam === 'airbnb' ? parseAirbnbEmail(body) : parseBookingEmail(body))
 })
 
 /** Public OAuth callback (mounted under /api/auth). */
@@ -227,6 +258,7 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
 
   try {
     const state = await verifyGmailOAuthState(c.env, stateToken)
+    const provider = isEmailProvider(state.provider) ? state.provider : 'Booking'
     const apartment = await getOwnedApartment(c.env.DB, state.apartmentId, state.userId)
     if (!apartment) {
       return c.redirect(integrationsRedirect(origin, { gmail: 'error', reason: 'apartment' }))
@@ -235,12 +267,11 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
     const redirectUri = gmailRedirectUri(c.req.url)
     const tokens = await exchangeGmailCode(c.env, code, redirectUri)
     if (!tokens.refreshToken) {
-      // May happen if user previously granted access without prompt=consent.
       const existing = await c.env.DB.prepare(
         `SELECT gmail_refresh_token_enc FROM email_connections
-         WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'`,
+         WHERE apartment_id = ? AND kind = 'gmail' AND provider = ?`,
       )
-        .bind(apartment.id)
+        .bind(apartment.id, provider)
         .first<{ gmail_refresh_token_enc: string | null }>()
       if (!existing?.gmail_refresh_token_enc) {
         return c.redirect(
@@ -254,9 +285,9 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
       : (
           await c.env.DB.prepare(
             `SELECT gmail_refresh_token_enc FROM email_connections
-             WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'`,
+             WHERE apartment_id = ? AND kind = 'gmail' AND provider = ?`,
           )
-            .bind(apartment.id)
+            .bind(apartment.id, provider)
             .first<{ gmail_refresh_token_enc: string }>()
         )?.gmail_refresh_token_enc
 
@@ -270,9 +301,9 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
     const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000).toISOString()
     const existingConn = await c.env.DB.prepare(
       `SELECT id FROM email_connections
-       WHERE apartment_id = ? AND kind = 'gmail' AND provider = 'Booking'`,
+       WHERE apartment_id = ? AND kind = 'gmail' AND provider = ?`,
     )
-      .bind(apartment.id)
+      .bind(apartment.id, provider)
       .first<{ id: string }>()
 
     if (existingConn) {
@@ -283,14 +314,7 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
              gmail_access_token_expires_at = ?, last_sync_error = NULL
          WHERE id = ?`,
       )
-        .bind(
-          state.userId,
-          tokens.email,
-          refreshEnc,
-          accessEnc,
-          expiresAt,
-          existingConn.id,
-        )
+        .bind(state.userId, tokens.email, refreshEnc, accessEnc, expiresAt, existingConn.id)
         .run()
     } else {
       await c.env.DB.prepare(
@@ -298,12 +322,13 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
           id, apartment_id, user_id, kind, provider, mailbox_email, status,
           gmail_refresh_token_enc, gmail_access_token_enc, gmail_access_token_expires_at,
           gmail_history_id, last_synced_at, last_sync_error, created_at
-        ) VALUES (?, ?, ?, 'gmail', 'Booking', ?, 'Active', ?, ?, ?, NULL, NULL, NULL, ?)`,
+        ) VALUES (?, ?, ?, 'gmail', ?, ?, 'Active', ?, ?, ?, NULL, NULL, NULL, ?)`,
       )
         .bind(
           newId(),
           apartment.id,
           state.userId,
+          provider,
           tokens.email,
           refreshEnc,
           accessEnc,
@@ -313,11 +338,10 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
         .run()
     }
 
-    // Ensure Booking integration row exists for status display
     const integration = await c.env.DB.prepare(
-      `SELECT id FROM integration_configurations WHERE apartment_id = ? AND provider = 'Booking'`,
+      `SELECT id FROM integration_configurations WHERE apartment_id = ? AND provider = ?`,
     )
-      .bind(apartment.id)
+      .bind(apartment.id, provider)
       .first<{ id: string }>()
     if (integration) {
       await c.env.DB.prepare(
@@ -329,17 +353,16 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO integration_configurations
           (id, apartment_id, provider, status, external_property_id, ical_url, last_synced_at, last_sync_error)
-         VALUES (?, ?, 'Booking', 'Active', NULL, NULL, NULL, NULL)`,
+         VALUES (?, ?, ?, 'Active', NULL, NULL, NULL, NULL)`,
       )
-        .bind(newId(), apartment.id)
+        .bind(newId(), apartment.id, provider)
         .run()
     }
 
-    // Kick an initial sync (best effort)
     const conn = await c.env.DB.prepare(
-      `SELECT id FROM email_connections WHERE apartment_id = ? AND kind = 'gmail' LIMIT 1`,
+      `SELECT id FROM email_connections WHERE apartment_id = ? AND kind = 'gmail' AND provider = ? LIMIT 1`,
     )
-      .bind(apartment.id)
+      .bind(apartment.id, provider)
       .first<{ id: string }>()
     if (conn) {
       try {
@@ -355,7 +378,9 @@ gmailOAuthCallbackRoutes.get('/gmail/callback', async (c) => {
       }
     }
 
-    return c.redirect(integrationsRedirect(origin, { gmail: 'connected' }))
+    return c.redirect(
+      integrationsRedirect(origin, { gmail: 'connected', provider }),
+    )
   } catch (error) {
     console.error('Gmail OAuth callback failed', error)
     return c.redirect(

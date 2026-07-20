@@ -5,6 +5,7 @@ import { RequireActiveApartment } from '@/components/RequireActiveApartment'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import type { EmailConnection, EmailIngestEvent } from '@/types/api'
 import {
   createLinkedCalendar,
   deleteLinkedCalendar,
@@ -19,6 +20,8 @@ import {
   syncLinkedCalendar,
 } from '@/lib/api'
 
+type OtaProvider = 'Booking' | 'Airbnb'
+
 function formatSyncTime(value?: string | null) {
   if (!value) {
     return 'never'
@@ -30,6 +33,213 @@ function formatSyncTime(value?: string | null) {
   return date.toLocaleString()
 }
 
+const SAMPLES: Record<OtaProvider, { subject: string; body: string }> = {
+  Booking: {
+    subject: 'New booking - Reservation confirmation 4839201745',
+    body: `Guest name: Ana Petrovic
+Check-in: 2026-08-12
+Check-out: 2026-08-15
+Reservation number: 4839201745
+Total price: EUR 420.00
+Commission: EUR 63.00
+Adults: 2
+Country: Croatia`,
+  },
+  Airbnb: {
+    subject: 'Reservation confirmed - HMABCDEF12',
+    body: `Confirmation code: HMABCDEF12
+Guest: Petra Novak
+Check-in: Fri, Aug 14, 2026
+Check-out: Mon, Aug 17, 2026
+Number of guests: 2
+You will earn: EUR 280.00`,
+  },
+}
+
+function ProviderMailboxCard({
+  provider,
+  connection,
+  apartmentId,
+  onBanner,
+  onMessage,
+  onError,
+  invalidate,
+  events,
+}: {
+  provider: OtaProvider
+  connection?: EmailConnection
+  apartmentId: string
+  onBanner: (value: string | null) => void
+  onMessage: (value: string | null) => void
+  onError: (value: string | null) => void
+  invalidate: () => Promise<void>
+  events: EmailIngestEvent[]
+}) {
+  const sample = SAMPLES[provider]
+  const [sampleSubject, setSampleSubject] = useState(sample.subject)
+  const [sampleBody, setSampleBody] = useState(sample.body)
+
+  const connectMutation = useMutation({
+    mutationFn: () => startBookingGmailConnect(apartmentId, provider),
+    onSuccess: ({ authUrl }) => {
+      window.location.assign(authUrl)
+    },
+    onError: (error) => {
+      onBanner(error instanceof Error ? error.message : `Could not start ${provider} Gmail connect`)
+    },
+  })
+
+  const syncMutation = useMutation({
+    mutationFn: () => syncBookingGmail(apartmentId, provider),
+    onSuccess: async (result) => {
+      onMessage(
+        `${provider} Gmail sync: scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}`,
+      )
+      await invalidate()
+    },
+    onError: (error) => {
+      onError(error instanceof Error ? error.message : `${provider} Gmail sync failed`)
+    },
+  })
+
+  const disconnectMutation = useMutation({
+    mutationFn: (connectionId: string) => disconnectEmailConnection(apartmentId, connectionId),
+    onSuccess: async () => {
+      onBanner(`${provider} Gmail disconnected.`)
+      await invalidate()
+    },
+  })
+
+  const sampleIngestMutation = useMutation({
+    mutationFn: () =>
+      ingestBookingEmailSample(
+        apartmentId,
+        {
+          subject: sampleSubject,
+          bodyText: sampleBody,
+          fromAddress: provider === 'Airbnb' ? 'noreply@airbnb.com' : 'noreply@booking.com',
+        },
+        provider,
+      ),
+    onSuccess: async (result) => {
+      onMessage(
+        `${provider} sample: ${result.applyAction || result.parseStatus}` +
+          (result.reservationId ? ` → ${result.reservationId}` : '') +
+          (result.error ? ` (${result.error})` : ''),
+      )
+      await invalidate()
+    },
+    onError: (error) => {
+      onError(error instanceof Error ? error.message : 'Sample ingest failed')
+    },
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">{provider} Gmail inbox</CardTitle>
+        <CardDescription>
+          Connect the Google account that receives {provider} host emails. This can differ from your
+          RentTracker login account.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {connection ? (
+          <div className="space-y-2 rounded-lg border px-3 py-3 text-sm">
+            <p>
+              <span className="font-medium">{connection.mailboxEmail}</span>
+              <span className="text-muted-foreground"> · {connection.status}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Last sync: {formatSyncTime(connection.lastSyncedAt)}
+            </p>
+            {connection.lastSyncError && (
+              <p className="text-xs text-destructive">{connection.lastSyncError}</p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+              >
+                Sync Gmail now
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => connectMutation.mutate()}
+                disabled={connectMutation.isPending}
+              >
+                Reconnect…
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => disconnectMutation.mutate(connection.id)}
+                disabled={disconnectMutation.isPending}
+              >
+                Disconnect
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            onClick={() => connectMutation.mutate()}
+            disabled={connectMutation.isPending}
+          >
+            {connectMutation.isPending ? 'Starting…' : `Connect ${provider} Gmail…`}
+          </Button>
+        )}
+
+        <div className="space-y-2 border-t pt-3">
+          <p className="text-sm font-medium">Paste a sample {provider} email</p>
+          <Input
+            value={sampleSubject}
+            onChange={(e) => setSampleSubject(e.target.value)}
+            placeholder="Subject"
+          />
+          <textarea
+            className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
+            value={sampleBody}
+            onChange={(e) => setSampleBody(e.target.value)}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => sampleIngestMutation.mutate()}
+            disabled={sampleIngestMutation.isPending}
+          >
+            Ingest sample
+          </Button>
+        </div>
+
+        {events.length > 0 && (
+          <div className="space-y-2 border-t pt-3">
+            <p className="text-sm font-medium">Recent email ingest</p>
+            {events.slice(0, 5).map((event) => (
+              <div key={event.id} className="rounded-md border px-3 py-2 text-xs">
+                <p className="font-medium">{event.subject || '(no subject)'}</p>
+                <p className="text-muted-foreground">
+                  {event.parseStatus}
+                  {event.reservationId ? ` · reservation ${event.reservationId.slice(0, 8)}…` : ''}
+                  {' · '}
+                  {formatSyncTime(event.createdAt)}
+                </p>
+                {event.parseError && <p className="text-destructive">{event.parseError}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function IntegrationsInner() {
   const { activeApartmentId } = useApartmentContext()
   const apartmentId = activeApartmentId!
@@ -38,19 +248,6 @@ function IntegrationsInner() {
   const [url, setUrl] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [sampleSubject, setSampleSubject] = useState(
-    'New booking - Reservation confirmation 4839201745',
-  )
-  const [sampleBody, setSampleBody] = useState(
-    `Guest name: Ana Petrovic
-Check-in: 2026-08-12
-Check-out: 2026-08-15
-Reservation number: 4839201745
-Total price: EUR 420.00
-Commission: EUR 63.00
-Adults: 2
-Country: Croatia`,
-  )
   const [gmailBanner, setGmailBanner] = useState<string | null>(null)
 
   useEffect(() => {
@@ -59,13 +256,15 @@ Country: Croatia`,
     if (!gmail) {
       return
     }
+    const provider = params.get('provider') || 'Booking'
     if (gmail === 'connected') {
-      setGmailBanner('Booking Gmail connected. Initial sync may take a moment.')
+      setGmailBanner(`${provider} Gmail connected. Initial sync may take a moment.`)
     } else {
       setGmailBanner(`Gmail connect failed: ${params.get('reason') || 'unknown error'}`)
     }
     params.delete('gmail')
     params.delete('reason')
+    params.delete('provider')
     const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`
     window.history.replaceState({}, '', next)
   }, [])
@@ -89,6 +288,9 @@ Country: Croatia`,
 
   const bookingGmail = (emailConnectionsQuery.data ?? []).find(
     (item) => item.kind === 'gmail' && item.provider === 'Booking',
+  )
+  const airbnbGmail = (emailConnectionsQuery.data ?? []).find(
+    (item) => item.kind === 'gmail' && item.provider === 'Airbnb',
   )
 
   const invalidateEmail = async () => {
@@ -140,57 +342,6 @@ Country: Croatia`,
     },
   })
 
-  const connectGmailMutation = useMutation({
-    mutationFn: () => startBookingGmailConnect(apartmentId),
-    onSuccess: ({ authUrl }) => {
-      window.location.assign(authUrl)
-    },
-    onError: (error) => {
-      setGmailBanner(error instanceof Error ? error.message : 'Could not start Gmail connect')
-    },
-  })
-
-  const syncGmailMutation = useMutation({
-    mutationFn: () => syncBookingGmail(apartmentId),
-    onSuccess: async (result) => {
-      setSyncMessage(
-        `Gmail sync: scanned ${result.scanned}, ingested ${result.ingested}, failed ${result.failed}`,
-      )
-      await invalidateEmail()
-    },
-    onError: (error) => {
-      setSyncError(error instanceof Error ? error.message : 'Gmail sync failed')
-    },
-  })
-
-  const disconnectMutation = useMutation({
-    mutationFn: (connectionId: string) => disconnectEmailConnection(apartmentId, connectionId),
-    onSuccess: async () => {
-      setGmailBanner('Booking Gmail disconnected.')
-      await invalidateEmail()
-    },
-  })
-
-  const sampleIngestMutation = useMutation({
-    mutationFn: () =>
-      ingestBookingEmailSample(apartmentId, {
-        subject: sampleSubject,
-        bodyText: sampleBody,
-        fromAddress: 'noreply@booking.com',
-      }),
-    onSuccess: async (result) => {
-      setSyncMessage(
-        `Sample ingest: ${result.applyAction || result.parseStatus}` +
-          (result.reservationId ? ` → ${result.reservationId}` : '') +
-          (result.error ? ` (${result.error})` : ''),
-      )
-      await invalidateEmail()
-    },
-    onError: (error) => {
-      setSyncError(error instanceof Error ? error.message : 'Sample ingest failed')
-    },
-  })
-
   const onSubmit = (event: FormEvent) => {
     event.preventDefault()
     createMutation.mutate()
@@ -201,8 +352,8 @@ Country: Croatia`,
       <div>
         <h2 className="text-xl font-semibold">Integrations</h2>
         <p className="text-sm text-muted-foreground">
-          Sync Airbnb / Booking via iCal, and enrich Booking stays from a separate Gmail inbox
-          (can differ from your login Google account).
+          Sync Airbnb / Booking via iCal, and enrich stays from separate Gmail inboxes (can differ
+          from your login Google account).
         </p>
       </div>
 
@@ -210,111 +361,27 @@ Country: Croatia`,
       {syncMessage && <p className="text-sm text-primary">{syncMessage}</p>}
       {syncError && <p className="text-sm text-destructive">{syncError}</p>}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Booking Gmail inbox</CardTitle>
-          <CardDescription>
-            Connect the Google account that receives Booking.com host emails. This is independent of
-            the account you use to sign in to RentTracker.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {bookingGmail ? (
-            <div className="space-y-2 rounded-lg border px-3 py-3 text-sm">
-              <p>
-                <span className="font-medium">{bookingGmail.mailboxEmail}</span>
-                <span className="text-muted-foreground"> · {bookingGmail.status}</span>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Last sync: {formatSyncTime(bookingGmail.lastSyncedAt)}
-              </p>
-              {bookingGmail.lastSyncError && (
-                <p className="text-xs text-destructive">{bookingGmail.lastSyncError}</p>
-              )}
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => syncGmailMutation.mutate()}
-                  disabled={syncGmailMutation.isPending}
-                >
-                  Sync Gmail now
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => connectGmailMutation.mutate()}
-                  disabled={connectGmailMutation.isPending}
-                >
-                  Reconnect…
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => disconnectMutation.mutate(bookingGmail.id)}
-                  disabled={disconnectMutation.isPending}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              onClick={() => connectGmailMutation.mutate()}
-              disabled={connectGmailMutation.isPending}
-            >
-              {connectGmailMutation.isPending ? 'Starting…' : 'Connect Booking Gmail…'}
-            </Button>
-          )}
+      <ProviderMailboxCard
+        provider="Booking"
+        connection={bookingGmail}
+        apartmentId={apartmentId}
+        onBanner={setGmailBanner}
+        onMessage={setSyncMessage}
+        onError={setSyncError}
+        invalidate={invalidateEmail}
+        events={ingestEventsQuery.data ?? []}
+      />
 
-          <div className="space-y-2 border-t pt-3">
-            <p className="text-sm font-medium">Paste a sample Booking email</p>
-            <p className="text-xs text-muted-foreground">
-              Useful for testing parsing before OAuth is fully configured.
-            </p>
-            <Input
-              value={sampleSubject}
-              onChange={(e) => setSampleSubject(e.target.value)}
-              placeholder="Subject"
-            />
-            <textarea
-              className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={sampleBody}
-              onChange={(e) => setSampleBody(e.target.value)}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => sampleIngestMutation.mutate()}
-              disabled={sampleIngestMutation.isPending}
-            >
-              Ingest sample
-            </Button>
-          </div>
-
-          {(ingestEventsQuery.data ?? []).length > 0 && (
-            <div className="space-y-2 border-t pt-3">
-              <p className="text-sm font-medium">Recent email ingest</p>
-              {(ingestEventsQuery.data ?? []).slice(0, 8).map((event) => (
-                <div key={event.id} className="rounded-md border px-3 py-2 text-xs">
-                  <p className="font-medium">{event.subject || '(no subject)'}</p>
-                  <p className="text-muted-foreground">
-                    {event.parseStatus}
-                    {event.reservationId ? ` · reservation ${event.reservationId.slice(0, 8)}…` : ''}
-                    {' · '}
-                    {formatSyncTime(event.createdAt)}
-                  </p>
-                  {event.parseError && <p className="text-destructive">{event.parseError}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ProviderMailboxCard
+        provider="Airbnb"
+        connection={airbnbGmail}
+        apartmentId={apartmentId}
+        onBanner={setGmailBanner}
+        onMessage={setSyncMessage}
+        onError={setSyncError}
+        invalidate={invalidateEmail}
+        events={ingestEventsQuery.data ?? []}
+      />
 
       <Card>
         <CardHeader>
@@ -389,8 +456,7 @@ Country: Croatia`,
         <CardHeader>
           <CardTitle className="text-lg">Detected platforms</CardTitle>
           <CardDescription>
-            Filled automatically when an iCal URL matches Airbnb or Booking. Status updates after
-            each sync.
+            Filled automatically when an iCal URL or mailbox matches Airbnb or Booking.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">

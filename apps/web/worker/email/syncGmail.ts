@@ -1,15 +1,17 @@
 import { newId, nowIso } from '../db'
 import type { Env } from '../env'
 import { notifyUserNewReservation } from '../push'
-import { applyParsedBookingEmail } from './apply'
+import { applyParsedOtaEmail } from './apply'
+import { parseAirbnbEmail } from './airbnbParse'
 import { parseBookingEmail } from './bookingParse'
 import {
   getGmailMessage,
-  listBookingMessages,
+  listOtaMessages,
   openToken,
   refreshGmailAccessToken,
   sealToken,
 } from './gmail'
+import { isEmailProvider, type EmailProvider } from './providers'
 
 export type EmailConnectionRow = {
   id: string
@@ -134,11 +136,12 @@ export async function recordIngestEvent(
     .run()
 }
 
-export async function ingestBookingEmailMessage(
+export async function ingestOtaEmailMessage(
   env: Env,
   input: {
     apartmentId: string
     connectionId: string | null
+    provider: EmailProvider
     userId?: string | null
     messageId: string
     fromAddress?: string | null
@@ -155,12 +158,19 @@ export async function ingestBookingEmailMessage(
   error?: string
 }> {
   try {
-    const parsed = parseBookingEmail({
-      subject: input.subject,
-      bodyText: input.bodyText,
-      bodyHtml: input.bodyHtml,
-    })
-    const apply = await applyParsedBookingEmail(env.DB, input.apartmentId, parsed)
+    const parsed =
+      input.provider === 'Airbnb'
+        ? parseAirbnbEmail({
+            subject: input.subject,
+            bodyText: input.bodyText,
+            bodyHtml: input.bodyHtml,
+          })
+        : parseBookingEmail({
+            subject: input.subject,
+            bodyText: input.bodyText,
+            bodyHtml: input.bodyHtml,
+          })
+    const apply = await applyParsedOtaEmail(env.DB, input.apartmentId, input.provider, parsed)
     const parseStatus =
       apply.action === 'ignored' ? 'ignored' : apply.reservationId ? 'parsed' : 'ignored'
 
@@ -184,7 +194,7 @@ export async function ingestBookingEmailMessage(
       input.userId
     ) {
       await notifyUserNewReservation(env, input.userId, {
-        title: 'New Booking.com reservation',
+        title: `New ${input.provider} reservation`,
         body: `${parsed.guestName || 'Guest'} · ${parsed.startDate} → ${parsed.endDate}`,
         url: '/calendar',
       })
@@ -213,6 +223,25 @@ export async function ingestBookingEmailMessage(
   }
 }
 
+/** @deprecated Use ingestOtaEmailMessage with provider Booking */
+export async function ingestBookingEmailMessage(
+  env: Env,
+  input: {
+    apartmentId: string
+    connectionId: string | null
+    userId?: string | null
+    messageId: string
+    fromAddress?: string | null
+    subject?: string | null
+    receivedAt?: string | null
+    bodyText?: string | null
+    bodyHtml?: string | null
+    notifyOnCreate?: boolean
+  },
+) {
+  return ingestOtaEmailMessage(env, { ...input, provider: 'Booking' })
+}
+
 export async function syncGmailConnection(
   env: Env,
   connectionId: string,
@@ -226,7 +255,10 @@ export async function syncGmailConnection(
 
   try {
     const { accessToken } = await resolveAccessToken(env, connection)
-    const messages = await listBookingMessages(accessToken)
+    const provider: EmailProvider = isEmailProvider(connection.provider)
+      ? connection.provider
+      : 'Booking'
+    const messages = await listOtaMessages(accessToken, provider)
     let ingested = 0
     let failed = 0
 
@@ -236,9 +268,10 @@ export async function syncGmailConnection(
       }
       try {
         const full = await getGmailMessage(accessToken, item.id)
-        const result = await ingestBookingEmailMessage(env, {
+        const result = await ingestOtaEmailMessage(env, {
           apartmentId: connection.apartment_id,
           connectionId: connection.id,
+          provider,
           userId: connection.user_id,
           messageId: full.id,
           fromAddress: full.from,
@@ -277,14 +310,15 @@ export async function syncGmailConnection(
     await env.DB.prepare(
       `UPDATE integration_configurations
        SET status = 'Active', last_synced_at = ?, last_sync_error = NULL
-       WHERE apartment_id = ? AND provider = 'Booking'`,
+       WHERE apartment_id = ? AND provider = ?`,
     )
-      .bind(syncedAt, connection.apartment_id)
+      .bind(syncedAt, connection.apartment_id, provider)
       .run()
 
     return { scanned: messages.length, ingested, failed }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gmail sync failed'
+    const provider = isEmailProvider(connection.provider) ? connection.provider : 'Booking'
     await env.DB.prepare(
       `UPDATE email_connections
        SET status = 'Error', last_sync_error = ?
@@ -295,9 +329,9 @@ export async function syncGmailConnection(
     await env.DB.prepare(
       `UPDATE integration_configurations
        SET status = 'Error', last_sync_error = ?
-       WHERE apartment_id = ? AND provider = 'Booking'`,
+       WHERE apartment_id = ? AND provider = ?`,
     )
-      .bind(message, connection.apartment_id)
+      .bind(message, connection.apartment_id, provider)
       .run()
     throw error instanceof Error ? error : new Error(message)
   }

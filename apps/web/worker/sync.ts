@@ -113,19 +113,20 @@ export async function syncLinkedCalendar(
           reference: string | null
           price: number | null
           commission: number | null
+          external_id: string | null
         }>()
 
-      // Merge onto an email-created Booking reservation with same dates / reference when present
+      // Merge onto an email-created OTA reservation with same dates / reference when present
       const emailMatch =
         existing ??
         (await db
           .prepare(
             `SELECT id, holding_name, reference, price, commission, external_id FROM reservations
              WHERE apartment_id = ?
-               AND source = 'Booking'
+               AND source IN ('Booking', 'Airbnb')
                AND state = 'Active'
                AND start_date = ? AND end_date = ?
-               AND (external_id LIKE 'email:booking:%' OR reference IS NOT NULL)
+               AND (external_id LIKE 'email:booking:%' OR external_id LIKE 'email:airbnb:%' OR reference IS NOT NULL)
              LIMIT 1`,
           )
           .bind(apartmentId, event.startDate, event.endDate)
@@ -143,6 +144,12 @@ export async function syncLinkedCalendar(
           /^CLOSED\s*-/i.test(event.holdingName) || event.holdingName === 'Reservation'
         const holdingName =
           icalLooksGeneric && emailMatch.holding_name ? emailMatch.holding_name : event.holdingName
+        const mergedSource =
+          event.source === 'Other'
+            ? emailMatch.external_id?.includes('airbnb')
+              ? 'Airbnb'
+              : 'Booking'
+            : event.source
 
         await db
           .prepare(
@@ -156,10 +163,9 @@ export async function syncLinkedCalendar(
             holdingName,
             event.startDate,
             event.endDate,
-            event.source === 'Other' ? 'Booking' : event.source,
+            mergedSource,
             event.reference,
-            // Prefer stable iCal external id once linked, keep email id if somehow missing
-            existing ? externalId : externalId,
+            externalId,
             emailMatch.id,
           )
           .run()

@@ -128,6 +128,17 @@ export function parseDateLoose(raw: string): string | null {
     }
   }
 
+  // English MDY with weekday: "Fri, Aug 14, 2026" or "Aug 14, 2026"
+  const enMdy = cleaned.match(
+    /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\s*,\s*)?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),?\s+(\d{4})/i,
+  )
+  if (enMdy) {
+    const month = EN_MONTHS[enMdy[1].slice(0, 3).toLowerCase()]
+    if (month) {
+      return `${enMdy[3]}-${month}-${enMdy[2].padStart(2, '0')}`
+    }
+  }
+
   // Croatian: "ned, 19. lis. 2025." or "19. lis. 2025"
   const hr = cleaned.match(
     /(?:(?:pon|uto|sri|čet|cet|pet|sub|ned)[a-z]*)?\s*,?\s*(\d{1,2})\.\s*(sij|velj|ožu|ozu|tra|svi|lip|srp|kol|ruj|lis|stu|pro)[a-z]*\.?\s*(\d{4})\.?/i,

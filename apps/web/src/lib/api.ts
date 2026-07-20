@@ -181,10 +181,13 @@ export async function listEmailIngestEvents(apartmentId: string): Promise<EmailI
 
 export async function startBookingGmailConnect(
   apartmentId: string,
-): Promise<{ authUrl: string; redirectUri: string }> {
+  provider: 'Booking' | 'Airbnb' = 'Booking',
+): Promise<{ authUrl: string; redirectUri: string; provider?: string }> {
   try {
-    const { data } = await api.post<{ authUrl: string; redirectUri: string }>(
+    const { data } = await api.post<{ authUrl: string; redirectUri: string; provider?: string }>(
       `/apartments/${apartmentId}/email-connections/gmail/start`,
+      null,
+      { params: { provider } },
     )
     return data
   } catch (error) {
@@ -196,10 +199,15 @@ export async function startBookingGmailConnect(
   }
 }
 
-export async function syncBookingGmail(apartmentId: string) {
+export async function syncBookingGmail(
+  apartmentId: string,
+  provider: 'Booking' | 'Airbnb' = 'Booking',
+) {
   try {
     const { data } = await api.post<{ scanned: number; ingested: number; failed: number }>(
       `/apartments/${apartmentId}/email-connections/gmail/sync`,
+      null,
+      { params: { provider } },
     )
     return data
   } catch (error) {
@@ -218,14 +226,16 @@ export async function disconnectEmailConnection(apartmentId: string, connectionI
 export async function ingestBookingEmailSample(
   apartmentId: string,
   payload: { subject?: string; bodyText?: string; fromAddress?: string; messageId?: string },
+  provider: 'Booking' | 'Airbnb' = 'Booking',
 ) {
   try {
+    const path = provider === 'Airbnb' ? 'airbnb' : 'booking'
     const { data } = await api.post<{
       parseStatus: string
       reservationId: string | null
       applyAction?: string
       error?: string
-    }>(`/apartments/${apartmentId}/email-connections/booking/ingest`, payload)
+    }>(`/apartments/${apartmentId}/email-connections/${path}/ingest`, payload)
     return data
   } catch (error) {
     if (axios.isAxiosError(error)) {

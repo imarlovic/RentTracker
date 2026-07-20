@@ -148,3 +148,46 @@ Ovu je poruku e-pošte poslao Booking.com
 Ova je poruka poslana na adresu partner@example.com
 `,
 }
+
+/** Anonymized Airbnb host reservation confirmation. */
+export const fixtureAirbnbConfirmed = {
+  subject: 'Reservation confirmed - HMABCDEF12',
+  bodyText: `Reservation confirmed
+
+Confirmation code: HMABCDEF12
+
+Guest: Petra Novak
+Check-in: Fri, Aug 14, 2026
+Check-out: Mon, Aug 17, 2026
+Number of guests: 2
+
+You will earn: EUR 280.00
+
+Listing: Sample Apartment Zagreb
+`,
+}
+
+export const fixtureAirbnbCanceled = {
+  subject: 'Reservation canceled - HMABCDEF12',
+  bodyText: `A reservation has been canceled.
+
+Confirmation code: HMABCDEF12
+Guest: Petra Novak
+Check-in: Fri, Aug 14, 2026
+Check-out: Mon, Aug 17, 2026
+`,
+}
+
+export const fixtureAirbnbAltered = {
+  subject: 'Reservation altered - HMABCDEF12',
+  bodyText: `A reservation has been altered.
+
+Confirmation code: HMABCDEF12
+Guest: Petra Novak
+Check-in: Sat, Aug 15, 2026
+Check-out: Tue, Aug 18, 2026
+Number of guests: 3
+You will earn: EUR 310.00
+`,
+}
+

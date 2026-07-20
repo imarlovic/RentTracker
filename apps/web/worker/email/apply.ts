@@ -1,5 +1,9 @@
 import { newId, type ReservationRow } from '../db'
+import type { ParsedAirbnbEmail } from './airbnbParse'
 import type { ParsedBookingEmail } from './bookingParse'
+import { emailExternalId, type EmailProvider } from './providers'
+
+export type ParsedOtaEmail = ParsedBookingEmail | ParsedAirbnbEmail
 
 export type ApplyResult = {
   reservationId: string | null
@@ -26,23 +30,14 @@ function namesLooselyMatch(a: string | null | undefined, b: string | null | unde
   return left === right || left.includes(right) || right.includes(left)
 }
 
-function datesMatch(
-  startA: string,
-  endA: string,
-  startB: string | null,
-  endB: string | null,
-): boolean {
-  if (!startB || !endB) {
-    return false
-  }
-  return startA === startB && endA === endB
-}
-
 async function findReservation(
   db: D1Database,
   apartmentId: string,
-  parsed: ParsedBookingEmail,
+  provider: EmailProvider,
+  parsed: ParsedOtaEmail,
 ): Promise<ReservationRow | null> {
+  const prefix = provider === 'Airbnb' ? 'email:airbnb:' : 'email:booking:'
+
   if (parsed.reservationNumber) {
     const byReference = await db
       .prepare(
@@ -54,8 +49,8 @@ async function findReservation(
       .bind(
         apartmentId,
         parsed.reservationNumber,
-        `email:booking:${parsed.reservationNumber}`,
-        `%:${parsed.reservationNumber}`,
+        `${prefix}${parsed.reservationNumber}`,
+        `%${parsed.reservationNumber}%`,
       )
       .first<ReservationRow>()
     if (byReference) {
@@ -70,10 +65,10 @@ async function findReservation(
          WHERE apartment_id = ?
            AND start_date = ?
            AND end_date = ?
-           AND source IN ('Booking', 'Other')
-         ORDER BY CASE WHEN source = 'Booking' THEN 0 ELSE 1 END`,
+           AND source IN (?, 'Other')
+         ORDER BY CASE WHEN source = ? THEN 0 ELSE 1 END`,
       )
-      .bind(apartmentId, parsed.startDate, parsed.endDate)
+      .bind(apartmentId, parsed.startDate, parsed.endDate, provider, provider)
       .all<ReservationRow>()
 
     const rows = results ?? []
@@ -87,23 +82,28 @@ async function findReservation(
       }
     }
     if (rows.length > 1) {
-      return rows.find((row) => row.source === 'Booking') ?? rows[0]
+      return rows.find((row) => row.source === provider) ?? rows[0]
     }
   }
 
   return null
 }
 
-export async function applyParsedBookingEmail(
+export async function applyParsedOtaEmail(
   db: D1Database,
   apartmentId: string,
-  parsed: ParsedBookingEmail,
+  provider: EmailProvider,
+  parsed: ParsedOtaEmail,
 ): Promise<ApplyResult> {
-  if (parsed.confidence === 'low' && !parsed.reservationNumber && !(parsed.startDate && parsed.endDate)) {
+  if (
+    parsed.confidence === 'low' &&
+    !parsed.reservationNumber &&
+    !(parsed.startDate && parsed.endDate)
+  ) {
     return { reservationId: null, action: 'ignored', reason: 'Insufficient booking fields' }
   }
 
-  const existing = await findReservation(db, apartmentId, parsed)
+  const existing = await findReservation(db, apartmentId, provider, parsed)
 
   if (parsed.action === 'canceled') {
     if (!existing) {
@@ -130,7 +130,7 @@ export async function applyParsedBookingEmail(
       .prepare(
         `UPDATE reservations
          SET state = 'Active',
-             source = 'Booking',
+             source = ?,
              holding_name = ?,
              start_date = ?,
              end_date = ?,
@@ -150,6 +150,7 @@ export async function applyParsedBookingEmail(
          WHERE id = ?`,
       )
       .bind(
+        provider,
         holdingName,
         startDate,
         endDate,
@@ -162,9 +163,7 @@ export async function applyParsedBookingEmail(
         parsed.children,
         parsed.people,
         parsed.country,
-        parsed.reservationNumber
-          ? `email:booking:${parsed.reservationNumber}`
-          : `email:booking:merge:${existing.id}`,
+        emailExternalId(provider, parsed.reservationNumber, existing.id),
         existing.id,
       )
       .run()
@@ -176,9 +175,7 @@ export async function applyParsedBookingEmail(
   }
 
   const id = newId()
-  const externalId = parsed.reservationNumber
-    ? `email:booking:${parsed.reservationNumber}`
-    : `email:booking:anon:${id}`
+  const externalId = emailExternalId(provider, parsed.reservationNumber, id)
 
   await db
     .prepare(
@@ -186,7 +183,7 @@ export async function applyParsedBookingEmail(
         id, apartment_id, state, external_id, reference, booking_date,
         start_date, end_date, source, holding_name, people, adults, children, infants,
         price, commission, currency, country
-      ) VALUES (?, ?, 'Active', ?, ?, ?, ?, ?, 'Booking', ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, 'Active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -196,7 +193,8 @@ export async function applyParsedBookingEmail(
       parsed.bookingDate,
       parsed.startDate,
       parsed.endDate,
-      parsed.guestName || 'Booking guest',
+      provider,
+      parsed.guestName || `${provider} guest`,
       parsed.people,
       parsed.adults,
       parsed.children,
@@ -210,16 +208,13 @@ export async function applyParsedBookingEmail(
   return { reservationId: id, action: 'created' }
 }
 
-export function shouldPreferEmailFieldsOverIcal(
-  existing: Pick<ReservationRow, 'reference' | 'price' | 'commission' | 'holding_name'>,
-  icalHoldingName: string,
-): { holdingName: string; keepReference: boolean } {
-  // Keep richer email-sourced guest names when iCal only has CLOSED - X or identical dates merge.
-  const icalLooksGeneric = /^CLOSED\s*-/i.test(icalHoldingName) || icalHoldingName === 'Reservation'
-  if (existing.holding_name && icalLooksGeneric && !namesLooselyMatch(existing.holding_name, icalHoldingName)) {
-    return { holdingName: existing.holding_name, keepReference: true }
-  }
-  return { holdingName: icalHoldingName, keepReference: true }
+/** @deprecated Use applyParsedOtaEmail(provider='Booking') */
+export async function applyParsedBookingEmail(
+  db: D1Database,
+  apartmentId: string,
+  parsed: ParsedBookingEmail,
+): Promise<ApplyResult> {
+  return applyParsedOtaEmail(db, apartmentId, 'Booking', parsed)
 }
 
-export { datesMatch, namesLooselyMatch }
+export { namesLooselyMatch }
